@@ -1,0 +1,2036 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bom do Sul — Sistema de Folha de Pagamento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+:root {
+  --teal: #13505C; --teal-dark: #0C3840; --teal-deeper: #082A30;
+  --cream: #F5EEDC; --cream-light: #FBF8F1; --ink: #1C2B2E;
+  --muted-teal: #5C7A80; --brick: #A8461F; --brick-light: #F3E1D6;
+  --moss: #5F7A3D; --moss-light: #E8EEDC; --gold: #C89B3C; --gold-light: #F7EDD6;
+  --border: #E1D9C4;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--cream-light);
+  min-height: 100vh;
+  width: 100%;
+}
+h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
+.icn { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+
+.boot-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--teal-deeper); }
+.boot-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(245,238,220,0.25); border-top-color: var(--cream); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------- LOGIN ---------------- */
+.login-screen {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(200,155,60,0.12), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(95,122,61,0.14), transparent 45%),
+    linear-gradient(160deg, var(--teal-deeper), var(--teal) 65%);
+  padding: 24px;
+}
+.login-card {
+  background: var(--cream-light);
+  border-radius: 18px;
+  width: 100%; max-width: 400px;
+  padding: 40px 36px 32px;
+  box-shadow: 0 30px 60px -20px rgba(8,42,48,0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.login-brand { text-align: center; margin-bottom: 28px; }
+.login-logo { width: 96px; height: auto; margin-bottom: 8px; }
+.login-subtitle { color: var(--muted-teal); font-size: 13.5px; margin: 4px 0 0; letter-spacing: 0.02em; }
+.login-form { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 12.5px; font-weight: 600; color: var(--muted-teal); margin: 10px 0 2px; text-transform: uppercase; letter-spacing: 0.04em; display: block; }
+.input-with-icon { position: relative; display: flex; align-items: center; color: var(--muted-teal); }
+.input-with-icon .icn { position: absolute; left: 12px; pointer-events: none; }
+.input-with-icon input {
+  width: 100%; padding: 11px 40px 11px 38px; border-radius: 10px;
+  border: 1.5px solid var(--border); font-size: 14.5px; background: #fff; color: var(--ink);
+  font-family: 'Inter', sans-serif;
+}
+.input-with-icon input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(19,80,92,0.12); }
+.icon-toggle { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--muted-teal); padding: 6px; display: flex; border-radius: 6px; }
+.icon-toggle:hover { background: var(--cream); color: var(--teal); }
+.remember-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin: 14px 0 6px; cursor: pointer; }
+.remember-row input { accent-color: var(--teal); width: 15px; height: 15px; }
+.login-error { display: flex; align-items: center; gap: 6px; color: var(--brick); background: var(--brick-light); padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
+.login-hint { text-align: center; font-size: 12px; color: var(--muted-teal); margin: 16px 0 0; }
+
+/* ---------------- BUTTONS ---------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 10px 18px; border-radius: 10px; border: none; cursor: pointer;
+  font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px;
+  transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--teal); color: var(--cream-light); }
+.btn-primary:hover:not(:disabled) { background: var(--teal-dark); }
+.btn-ghost { background: transparent; color: var(--muted-teal); border: 1.5px solid var(--border); }
+.btn-ghost:hover { background: var(--cream); }
+.btn-danger { background: var(--brick); color: #fff; }
+.btn-danger:hover { background: #8a3717; }
+.btn-moss { background: var(--moss); color: #fff; }
+.btn-moss:hover { background: #4d652f; }
+.btn-brick { background: var(--brick); color: #fff; }
+.btn-brick:hover { background: #8a3717; }
+.btn-block { width: 100%; margin-top: 16px; padding: 12px; font-size: 15px; }
+
+/* ---------------- SHELL / SIDEBAR ---------------- */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 240px; flex-shrink: 0; background: var(--teal-deeper); color: var(--cream-light); display: flex; flex-direction: column; padding: 22px 16px; }
+.sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 22px; border-bottom: 1px solid rgba(245,238,220,0.14); margin-bottom: 18px; }
+.sidebar-logo { width: 40px; height: auto; }
+.sidebar-company { display: flex; flex-direction: column; line-height: 1.3; overflow: hidden; }
+.sidebar-company strong { font-family: 'Fraunces', serif; font-size: 16px; }
+.sidebar-company span { font-size: 10.5px; color: rgba(245,238,220,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-nav { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.sidebar-item {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px;
+  background: transparent; border: none; color: rgba(245,238,220,0.75); cursor: pointer;
+  font-size: 13.8px; font-family: 'Inter', sans-serif; font-weight: 500; text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sidebar-item:hover { background: rgba(245,238,220,0.08); color: var(--cream-light); }
+.sidebar-item.active { background: var(--gold); color: var(--teal-deeper); font-weight: 600; }
+.sidebar-logout {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px;
+  background: transparent; border: 1px solid rgba(245,238,220,0.16); color: rgba(245,238,220,0.75);
+  cursor: pointer; font-size: 13.5px; font-family: 'Inter', sans-serif; margin-top: 12px;
+}
+.sidebar-logout:hover { background: rgba(245,238,220,0.08); color: #fff; }
+.sync-status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-top: 10px; border-radius: 9px; font-size: 11.5px; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); }
+.sync-status.cloud-ok { color: #a8d5ae; }
+.sync-status.cloud-warn { color: var(--gold); }
+.sync-status.cloud-off { color: rgba(245,238,220,0.45); }
+.sync-status span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------- STATUS BADGES ---------------- */
+.status-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.status-on { background: var(--moss-light); color: var(--moss); }
+.status-off { background: var(--brick-light); color: var(--brick); }
+
+/* ---------------- RANKING PANELS ---------------- */
+.rank-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.rank-row:last-child { border-bottom: none; }
+.rank-pos { width: 26px; flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted-teal); font-weight: 600; }
+.rank-info { flex: 1; min-width: 0; }
+.rank-info strong { display: block; font-size: 13px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-bar-track { height: 5px; border-radius: 999px; background: var(--cream); overflow: hidden; }
+.rank-bar-fill { height: 100%; border-radius: 999px; }
+.rank-value { font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; flex-shrink: 0; text-align: right; }
+.rank-tag { display: block; font-size: 9.5px; font-weight: 600; text-transform: uppercase; color: var(--brick); margin-top: 2px; }
+
+/* ---------------- SUPABASE INTEGRATION ---------------- */
+.sb-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.sb-sql-details { margin-top: 16px; font-size: 13px; }
+.sb-sql-details summary { cursor: pointer; color: var(--teal); font-weight: 600; padding: 6px 0; }
+.sb-sql-block { background: var(--teal-deeper); color: #d9ecec; padding: 16px; border-radius: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; line-height: 1.6; overflow-x: auto; white-space: pre; margin-top: 8px; }
+.ping-result { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; padding: 10px 12px; border-radius: 9px; background: var(--cream-light); }
+.ping-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted-teal); flex-shrink: 0; }
+.ping-ok .ping-dot { background: var(--moss); }
+.ping-fail .ping-dot { background: var(--brick); }
+.ping-pending .ping-dot { background: var(--gold); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.app-main { flex: 1; padding: 32px 40px; overflow-x: hidden; min-width: 0; }
+
+/* ---------------- VIEW HEADER ---------------- */
+.view { max-width: 1180px; }
+.view-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 26px; flex-wrap: wrap; }
+.view-header h1 { font-size: 26px; color: var(--teal-deeper); }
+.view-subtitle { color: var(--muted-teal); font-size: 13.5px; margin: 4px 0 0; }
+.select-year, select {
+  padding: 9px 30px 9px 12px; border-radius: 9px; border: 1.5px solid var(--border);
+  background: #fff; font-family: 'Inter', sans-serif; font-size: 13.5px; color: var(--ink); cursor: pointer;
+}
+
+/* ---------------- CARDS / STATS ---------------- */
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.stat-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: flex; align-items: center; gap: 14px; }
+.stat-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stat-value { display: block; font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600; color: var(--teal-deeper); line-height: 1.25; }
+.stat-label { display: block; font-size: 12px; color: var(--muted-teal); margin-top: 2px; }
+
+.panels-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+.panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; }
+.panel h3 { font-size: 15px; color: var(--teal-deeper); margin-bottom: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.panel-span2 { grid-column: 1 / -1; }
+.dash-block { margin-top: 16px; }
+.chart-box { position: relative; height: 270px; }
+@media (max-width: 900px) { .panels-grid { grid-template-columns: 1fr; } }
+
+/* ---------------- TOOLBAR / TABLE ---------------- */
+.toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.search-box { display: flex; align-items: center; gap: 8px; background: #fff; border: 1.5px solid var(--border); border-radius: 10px; padding: 8px 12px; flex: 1; max-width: 340px; color: var(--muted-teal); }
+.search-box input { border: none; outline: none; font-size: 13.5px; width: 100%; font-family: 'Inter', sans-serif; }
+.toolbar-count { font-size: 12.5px; color: var(--muted-teal); }
+
+.table-wrap { background: #fff; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.data-table th { text-align: left; padding: 12px 16px; background: var(--cream); color: var(--teal-deeper); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.data-table td { padding: 13px 16px; border-top: 1px solid var(--border); vertical-align: middle; }
+.data-table tbody tr:hover { background: var(--cream-light); }
+.table-subtext { font-size: 11.5px; color: var(--muted-teal); margin-top: 2px; }
+.empty-row { text-align: center; color: var(--muted-teal); padding: 30px !important; }
+.empty-hint { color: var(--muted-teal); font-size: 13.5px; }
+.row-actions { display: flex; gap: 6px; }
+.icon-btn { background: none; border: none; cursor: pointer; color: var(--muted-teal); padding: 6px; border-radius: 7px; display: flex; }
+.icon-btn:hover { background: var(--cream); color: var(--teal); }
+.icon-btn-danger:hover { background: var(--brick-light); color: var(--brick); }
+
+/* ---------------- MODAL ---------------- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(8,42,48,0.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.modal-card { background: #fff; border-radius: 16px; width: 100%; max-width: 620px; max-height: 88vh; overflow-y: auto; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.35); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; z-index: 1; }
+.modal-header h3 { font-size: 17px; color: var(--teal-deeper); }
+.modal-body { padding: 22px; }
+
+/* ---------------- FORMS ---------------- */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-field { display: flex; flex-direction: column; gap: 5px; }
+.form-field.span-2 { grid-column: span 2; }
+.form-field label { font-size: 12px; font-weight: 600; color: var(--muted-teal); text-transform: uppercase; letter-spacing: 0.03em; }
+.form-field input, .form-field select {
+  padding: 9px 12px; border-radius: 9px; border: 1.5px solid var(--border); font-size: 14px;
+  font-family: 'Inter', sans-serif; color: var(--ink);
+}
+.form-field input:focus, .form-field select:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(19,80,92,0.1); }
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+.filters-bar { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+.filters-bar .form-field { min-width: 160px; }
+.filters-bar select, .filters-bar input { width: 100%; padding: 9px 12px; border-radius: 9px; border: 1.5px solid var(--border); font-size: 13.5px; font-family: 'Inter', sans-serif; }
+
+/* ---------------- LANÇAMENTOS ---------------- */
+.tipo-toggle { display: flex; gap: 8px; margin-bottom: 14px; padding: 0 22px; }
+.lanc-tipo-btn { flex: 1; padding: 9px; border-radius: 9px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--muted-teal); font-family: 'Inter', sans-serif; }
+.lanc-tipo-btn.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; padding: 0 22px; }
+.chip { padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--border); background: #fff; font-size: 12px; cursor: pointer; color: var(--ink); font-family: 'Inter', sans-serif; }
+.chip:hover { border-color: var(--teal); }
+.chip-active { background: var(--gold); border-color: var(--gold); color: var(--teal-deeper); font-weight: 600; }
+
+.lanc-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 800px) { .lanc-columns { grid-template-columns: 1fr; } }
+.lanc-col-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid; }
+.lanc-col-title-moss { color: var(--moss); border-color: var(--moss); }
+.lanc-col-title-brick { color: var(--brick); border-color: var(--brick); }
+.lanc-item { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; margin-bottom: 8px; }
+.lanc-item-right { display: flex; align-items: center; gap: 10px; }
+
+/* ---------------- PAYSLIP ---------------- */
+.payslip { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 26px 28px; }
+.payslip-header { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 2px solid var(--teal-deeper); margin-bottom: 16px; }
+.payslip-logo { width: 46px; height: auto; }
+.payslip-header strong { font-family: 'Fraunces', serif; font-size: 16px; color: var(--teal-deeper); display: block; }
+.payslip-meta { font-size: 11.5px; color: var(--muted-teal); margin-top: 2px; }
+.payslip-competencia { margin-left: auto; text-align: right; }
+.payslip-competencia span { display: block; font-size: 10.5px; letter-spacing: 0.05em; color: var(--muted-teal); text-transform: uppercase; }
+.payslip-competencia strong { font-family: 'Fraunces', serif; font-size: 16px; color: var(--teal-deeper); }
+.payslip-funcionario { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 6px; padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+.payslip-funcionario span { display: block; color: var(--muted-teal); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; }
+.payslip-funcionario strong { font-weight: 600; }
+.payslip-funcionario .grow { flex: 1; min-width: 180px; }
+.payslip-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12.5px; }
+.payslip-table th { text-align: left; padding: 7px 8px; background: var(--cream); color: var(--teal-deeper); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; }
+.payslip-table td { padding: 7px 8px; border-top: 1px solid var(--border); }
+.num-positive { color: var(--moss); font-weight: 600; }
+.num-negative { color: var(--brick); font-weight: 600; }
+.payslip-bases { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12px; padding: 12px 0; border-top: 1px dashed var(--border); }
+.payslip-bases span { display: block; color: var(--muted-teal); font-size: 10.5px; text-transform: uppercase; }
+.payslip-totals { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+.payslip-totals > div { flex: 1; min-width: 150px; background: var(--cream-light); border-radius: 10px; padding: 12px 14px; }
+.payslip-totals span { display: block; font-size: 10.5px; color: var(--muted-teal); text-transform: uppercase; letter-spacing: 0.03em; }
+.payslip-totals strong { font-family: 'Fraunces', serif; font-size: 16px; }
+.payslip-liquido { background: var(--teal-deeper) !important; }
+.payslip-liquido span { color: rgba(245,238,220,0.7) !important; }
+.payslip-liquido strong { color: var(--cream-light) !important; font-size: 19px !important; }
+.payslip-signature { margin-top: 26px; font-size: 12px; color: var(--muted-teal); }
+.signature-line { margin-top: 30px; padding-top: 6px; border-top: 1px solid var(--ink); max-width: 280px; text-align: center; }
+
+/* ---------------- CONFIG TABLE ---------------- */
+.config-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.config-table th { text-align: left; padding: 8px; color: var(--muted-teal); font-size: 11px; text-transform: uppercase; }
+.config-table td { padding: 5px 8px 5px 0; }
+.config-table input { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1.5px solid var(--border); font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+
+.danger-zone { border-color: var(--brick-light); background: #fffaf7; }
+.danger-zone h3 { color: var(--brick); }
+
+/* ---------------- PRINT ---------------- */
+@media print {
+  .no-print, .sidebar { display: none !important; }
+  .app-main { padding: 0 !important; }
+  .payslip { border: none !important; box-shadow: none !important; }
+}
+
+@media (max-width: 760px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; flex-direction: row; align-items: center; padding: 12px 16px; overflow-x: auto; }
+  .sidebar-brand { border-bottom: none; margin-bottom: 0; padding-bottom: 0; padding-right: 14px; border-right: 1px solid rgba(245,238,220,0.14); margin-right: 10px; }
+  .sidebar-company { display: none; }
+  .sidebar-nav { flex-direction: row; }
+  .sidebar-item span { display: none; }
+  .sidebar-logout { margin-top: 0; margin-left: auto; }
+  .sidebar-logout span { display: none; }
+  .app-main { padding: 20px 16px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .form-field.span-2 { grid-column: span 1; }
+  .tipo-toggle, .chip-row { padding: 0; }
+}
+
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ============================================================
+   BOM DO SUL — SISTEMA DE FOLHA DE PAGAMENTO
+   Vanilla JS, sem dependências de build. Dados persistidos via
+   window.storage (privados, por usuário).
+   ============================================================ */
+
+/* ---------------- CONSTANTS ---------------- */
+
+const LOGO_B64 = "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";
+
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+const STORAGE_KEYS = {
+  CRED: 'auth-credentials',
+  REMEMBER: 'remembered-login',
+  FUNC: 'funcionarios',
+  LANC: 'lancamentos',
+  CONFIG: 'app-config',
+  EMPRESA: 'empresa-info',
+  SUPABASE: 'supabase-config',
+};
+
+// Credenciais informadas pelo usuário — pré-preenchidas. A chave "anon" do
+// Supabase é feita para ser pública em código de front-end, mas isso só é
+// seguro se as políticas de RLS das tabelas forem restritivas. Ver aviso
+// de segurança nas Configurações > Integração Supabase.
+const DEFAULT_SUPABASE = {
+  url: 'https://tulldciuzormkvwlwuwt.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1bGxkY2l1em9ybWt2d2x3dXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNzc1MDgsImV4cCI6MjA5ODg1MzUwOH0.KOVILLBrCsARjpYytpsuZkwTN0Adw7UuvzJKTEqptMY',
+  enabled: false,
+};
+
+const SUPABASE_SQL_SCRIPT = `-- Tabela de funcionários
+create table if not exists funcionarios (
+  id text primary key,
+  codigo text,
+  nome text not null,
+  cpf text,
+  pis text,
+  ctps text,
+  serie text,
+  funcao text,
+  cbo text,
+  admissao date,
+  demissao date,
+  salario_base numeric not null default 0,
+  dependentes integer not null default 0,
+  created_at timestamptz default now()
+);
+
+-- Tabela de lançamentos (proventos e descontos)
+create table if not exists lancamentos (
+  id text primary key,
+  funcionario_id text references funcionarios(id) on delete cascade,
+  ano integer not null,
+  mes integer not null,
+  tipo text not null check (tipo in ('provento','desconto')),
+  codigo text,
+  descricao text not null,
+  referencia text,
+  valor numeric not null default 0,
+  created_at timestamptz default now()
+);
+
+-- Configurações da empresa e tabelas de INSS/IRRF (linha única, id = 1)
+create table if not exists app_settings (
+  id integer primary key,
+  config jsonb,
+  empresa jsonb,
+  updated_at timestamptz default now()
+);
+
+alter table funcionarios enable row level security;
+alter table lancamentos enable row level security;
+alter table app_settings enable row level security;
+
+-- ATENÇÃO: estas políticas liberam acesso total para quem tiver a chave anon.
+-- Adequado para uso pessoal/teste. Para dados reais, restrinja com Supabase Auth.
+create policy "anon full access" on funcionarios for all using (true) with check (true);
+create policy "anon full access" on lancamentos for all using (true) with check (true);
+create policy "anon full access" on app_settings for all using (true) with check (true);`;
+
+const DEFAULT_CREDENTIALS = { username: 'admin', password: 'admin123' };
+
+const DEFAULT_EMPRESA = {
+  nome: 'Conservas do Sul Ltda',
+  marca: 'Bom do Sul',
+  cnpj: '34.109.812/0001-91',
+  endereco: 'Rua Duque de Caxias, 598 — CEP 89121-000 — Rio dos Cedros/SC',
+};
+
+// Valores de referência (2024/2025) — ajustáveis em Configurações,
+// pois as tabelas de INSS/IRRF mudam anualmente por legislação.
+const DEFAULT_CONFIG = {
+  fgtsRate: 8,
+  deducaoPorDependente: 189.59,
+  inss: [
+    { ate: 1412.00, aliquota: 7.5 },
+    { ate: 2666.68, aliquota: 9 },
+    { ate: 4000.03, aliquota: 12 },
+    { ate: 7786.02, aliquota: 14 },
+  ],
+  irrf: [
+    { ate: 2259.20, aliquota: 0, deducao: 0 },
+    { ate: 2826.65, aliquota: 7.5, deducao: 169.44 },
+    { ate: 3751.05, aliquota: 15, deducao: 381.44 },
+    { ate: 4664.68, aliquota: 22.5, deducao: 662.77 },
+    { ate: 99999999, aliquota: 27.5, deducao: 896.00 },
+  ],
+};
+
+const CODIGOS_PROVENTO = [
+  { codigo: '001', descricao: 'Horas extras 50%' },
+  { codigo: '002', descricao: 'Horas extras 100%' },
+  { codigo: '003', descricao: 'Adicional noturno' },
+  { codigo: '004', descricao: 'Adicional insalubridade' },
+  { codigo: '006', descricao: 'Comissões' },
+  { codigo: '007', descricao: 'Férias' },
+  { codigo: '008', descricao: '13º salário' },
+  { codigo: '009', descricao: 'Bônus / Gratificação' },
+  { codigo: '099', descricao: 'Outro provento' },
+];
+
+const CODIGOS_DESCONTO = [
+  { codigo: '703', descricao: 'Faltas não justificadas (dias)' },
+  { codigo: '723', descricao: 'Faltas não justificadas (horas)' },
+  { codigo: '743', descricao: 'Faltas justificadas (dia)' },
+  { codigo: '763', descricao: 'Atrasos (horas)' },
+  { codigo: '782', descricao: 'DSR sobre faltas' },
+  { codigo: '850', descricao: 'Vale transporte' },
+  { codigo: '851', descricao: 'Vale alimentação/refeição' },
+  { codigo: '852', descricao: 'Plano de saúde' },
+  { codigo: '853', descricao: 'Adiantamento salarial' },
+  { codigo: '899', descricao: 'Outro desconto' },
+];
+
+const COLORS = {
+  teal: '#13505C', tealDark: '#0C3840', tealDeeper: '#082A30',
+  cream: '#F5EEDC', creamLight: '#FBF8F1', ink: '#1C2B2E',
+  mutedTeal: '#5C7A80', brick: '#A8461F', brickLight: '#F3E1D6',
+  moss: '#5F7A3D', mossLight: '#E8EEDC', gold: '#C89B3C', goldLight: '#F7EDD6',
+  border: '#E1D9C4',
+};
+
+/* ---------------- HELPERS ---------------- */
+
+const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+
+const fmtBRL = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const fmtDate = (iso) => {
+  if (!iso) return '—';
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  const [y, m, d] = parts;
+  return `${d}/${m}/${y}`;
+};
+
+const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function calcINSS(salarioBase, inssTable) {
+  let total = 0;
+  let faixaAnterior = 0;
+  for (const faixa of inssTable) {
+    if (salarioBase > faixaAnterior) {
+      const tetoFaixa = Math.min(salarioBase, faixa.ate);
+      const baseFaixa = tetoFaixa - faixaAnterior;
+      total += baseFaixa * (faixa.aliquota / 100);
+      faixaAnterior = faixa.ate;
+    } else {
+      break;
+    }
+  }
+  return round2(total);
+}
+
+function calcIRRF(baseCalculo, irrfTable) {
+  if (baseCalculo <= 0) return 0;
+  for (const faixa of irrfTable) {
+    if (baseCalculo <= faixa.ate) {
+      const val = baseCalculo * (faixa.aliquota / 100) - faixa.deducao;
+      return round2(Math.max(val, 0));
+    }
+  }
+  return 0;
+}
+
+function computeFolha(funcionario, ano, mes, lancamentos, config) {
+  const itens = lancamentos.filter((l) => l.funcionarioId === funcionario.id && l.ano === ano && l.mes === mes);
+  const proventosLanc = itens.filter((i) => i.tipo === 'provento');
+  const descontosLanc = itens.filter((i) => i.tipo === 'desconto');
+
+  const salarioBaseItem = {
+    id: 'base-' + funcionario.id,
+    codigo: '005',
+    descricao: 'Salário mensalista',
+    referencia: '30,00',
+    valor: round2(funcionario.salarioBase || 0),
+  };
+  const proventos = [salarioBaseItem, ...proventosLanc];
+  const totalProventos = round2(proventos.reduce((s, i) => s + Number(i.valor || 0), 0));
+
+  const baseINSS = totalProventos;
+  const inssValor = calcINSS(baseINSS, config.inss);
+
+  const baseFGTS = baseINSS;
+  const fgtsValor = round2(baseFGTS * (config.fgtsRate / 100));
+
+  const dependentesDeducao = round2((funcionario.dependentes || 0) * config.deducaoPorDependente);
+  const baseIRRF = Math.max(0, round2(baseINSS - inssValor - dependentesDeducao));
+  const irrfValor = calcIRRF(baseIRRF, config.irrf);
+
+  const outrosDescontos = round2(descontosLanc.reduce((s, i) => s + Number(i.valor || 0), 0));
+  const totalDescontos = round2(inssValor + irrfValor + outrosDescontos);
+  const salarioLiquido = round2(totalProventos - totalDescontos);
+
+  return {
+    funcionario, ano, mes, proventos, descontosLanc,
+    totalProventos, baseINSS, inssValor, baseFGTS, fgtsValor,
+    baseIRRF, irrfValor, outrosDescontos, totalDescontos, salarioLiquido, dependentesDeducao,
+  };
+}
+
+/* ---------------- STORAGE ---------------- */
+
+async function storageGet(key) {
+  try {
+    const res = await window.storage.get(key, false);
+    return res ? JSON.parse(res.value) : null;
+  } catch (e) {
+    return null;
+  }
+}
+async function storageSet(key, value) {
+  try {
+    await window.storage.set(key, JSON.stringify(value), false);
+    return true;
+  } catch (e) {
+    console.error('storage set failed', key, e);
+    return false;
+  }
+}
+
+/* ---------------- SUPABASE (REST / PostgREST) ---------------- */
+
+function supabaseBaseUrl(cfg) {
+  let u = (cfg.url || '').trim().replace(/\/+$/, '');
+  u = u.replace(/\/rest\/v1$/, '');
+  return u;
+}
+function supabaseHeaders(cfg, extra) {
+  return Object.assign({
+    'apikey': cfg.anonKey,
+    'Authorization': 'Bearer ' + cfg.anonKey,
+    'Content-Type': 'application/json',
+  }, extra || {});
+}
+
+// Testa a conectividade com o projeto Supabase (não exige tabelas criadas).
+async function supabasePing(cfg) {
+  const start = (window.performance || Date).now();
+  try {
+    if (!cfg.url || !cfg.anonKey) return { ok: false, ms: 0, message: 'URL ou chave não configuradas.' };
+    const res = await fetch(supabaseBaseUrl(cfg) + '/rest/v1/', { method: 'GET', headers: supabaseHeaders(cfg) });
+    const ms = Math.round((window.performance || Date).now() - start);
+    if (res.ok || res.status === 404) return { ok: true, ms, message: `Conectado (HTTP ${res.status})` };
+    if (res.status === 401 || res.status === 403) return { ok: false, ms, message: `Chave rejeitada (HTTP ${res.status})` };
+    return { ok: false, ms, message: `Resposta inesperada (HTTP ${res.status})` };
+  } catch (e) {
+    const ms = Math.round((window.performance || Date).now() - start);
+    return { ok: false, ms, message: 'Falha de rede / CORS / URL inválida' };
+  }
+}
+
+async function supabaseSelect(cfg, table, query) {
+  const url = supabaseBaseUrl(cfg) + '/rest/v1/' + table + (query || '?select=*');
+  const res = await fetch(url, { headers: supabaseHeaders(cfg) });
+  if (!res.ok) throw new Error('Supabase select ' + table + ' falhou: HTTP ' + res.status);
+  return res.json();
+}
+async function supabaseUpsert(cfg, table, rows, onConflict) {
+  const url = supabaseBaseUrl(cfg) + '/rest/v1/' + table + (onConflict ? '?on_conflict=' + onConflict : '');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: supabaseHeaders(cfg, { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) throw new Error('Supabase upsert ' + table + ' falhou: HTTP ' + res.status);
+  return res.json();
+}
+async function supabaseDeleteById(cfg, table, id) {
+  const url = supabaseBaseUrl(cfg) + '/rest/v1/' + table + '?id=eq.' + encodeURIComponent(id);
+  const res = await fetch(url, { method: 'DELETE', headers: supabaseHeaders(cfg, { 'Prefer': 'return=minimal' }) });
+  if (!res.ok) throw new Error('Supabase delete ' + table + ' falhou: HTTP ' + res.status);
+}
+
+// Envia (fire-and-forget, com log de erro) uma linha para o Supabase quando a
+// sincronização em nuvem está ativa. Nunca bloqueia a interface local.
+function cloudSyncUpsert(table, row, onConflict) {
+  if (!state.supabase.enabled) return;
+  supabaseUpsert(state.supabase, table, [row], onConflict).catch((e) => console.warn('cloud sync (upsert) falhou:', e.message));
+}
+function cloudSyncDelete(table, id) {
+  if (!state.supabase.enabled) return;
+  supabaseDeleteById(state.supabase, table, id).catch((e) => console.warn('cloud sync (delete) falhou:', e.message));
+}
+
+/* ---------------- ICONS (inline SVG, no external deps) ---------------- */
+
+function icon(name, size) {
+  size = size || 18;
+  const common = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const paths = {
+    eye: '<path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3.2"/>',
+    eyeOff: '<path d="M17.9 17.9C16.2 19.05 14.2 19.5 12 19.5 5 19.5 1 12 1 12a19 19 0 0 1 5.06-5.94M9.9 4.7A10.7 10.7 0 0 1 12 4.5c7 0 11 7.5 11 7.5a18.9 18.9 0 0 1-2.66 3.79M14.2 14.2a3.2 3.2 0 1 1-4.4-4.4"/><line x1="2" y1="2" x2="22" y2="22"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+    lock: '<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+    logout: '<path d="M9 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H9"/><path d="M16 16l4-4-4-4"/><path d="M20 12H9"/>',
+    grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.3"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.3"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.3"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.3"/>',
+    users: '<circle cx="8.5" cy="8" r="3.3"/><path d="M2.5 20c0-3.6 2.7-5.8 6-5.8s6 2.2 6 5.8"/><circle cx="17" cy="8.5" r="2.6"/><path d="M15.5 14.3c2.6.3 4.5 2.3 4.5 5.2"/>',
+    clipboard: '<rect x="5" y="4.5" width="14" height="17" rx="2"/><rect x="8.5" y="2.5" width="7" height="3.5" rx="1"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="8" y1="19" x2="13" y2="19"/>',
+    sheet: '<rect x="4.5" y="3" width="15" height="18" rx="2"/><line x1="4.5" y1="9" x2="19.5" y2="9"/><line x1="9.5" y1="9" x2="9.5" y2="21"/><line x1="14.5" y1="9" x2="14.5" y2="21"/><line x1="4.5" y1="15" x2="19.5" y2="15"/>',
+    settings: '<circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.9l.06.06a2.1 2.1 0 1 1-3 3l-.06-.06a1.7 1.7 0 0 0-1.9-.34 1.7 1.7 0 0 0-1 1.56V20a2.1 2.1 0 1 1-4.2 0v-.1a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.9.34l-.06.06a2.1 2.1 0 1 1-3-3l.06-.06a1.7 1.7 0 0 0 .34-1.9 1.7 1.7 0 0 0-1.56-1H2a2.1 2.1 0 1 1 0-4.2h.1a1.7 1.7 0 0 0 1.56-1.1 1.7 1.7 0 0 0-.34-1.9l-.06-.06a2.1 2.1 0 1 1 3-3l.06.06a1.7 1.7 0 0 0 1.9.34H8.3a1.7 1.7 0 0 0 1-1.56V2a2.1 2.1 0 1 1 4.2 0v.1a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.9-.34l.06-.06a2.1 2.1 0 1 1 3 3l-.06.06a1.7 1.7 0 0 0-.34 1.9V8.3a1.7 1.7 0 0 0 1.56 1H22a2.1 2.1 0 1 1 0 4.2h-.1a1.7 1.7 0 0 0-1.56 1z"/>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    trash: '<polyline points="4,7 20,7"/><path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/><path d="M6.5 7l1 12.5a2 2 0 0 0 2 1.8h5a2 2 0 0 0 2-1.8l1-12.5"/>',
+    pencil: '<path d="M4 20l1-4.2L15.8 5 19 8.2 8.2 19 4 20z"/><line x1="13.5" y1="6.5" x2="17.5" y2="10.5"/>',
+    search: '<circle cx="10.5" cy="10.5" r="6.5"/><line x1="20" y1="20" x2="15.3" y2="15.3"/>',
+    x: '<line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>',
+    check: '<polyline points="4,12.5 9.5,18 20,6"/>',
+    alert: '<circle cx="12" cy="12" r="9.5"/><line x1="12" y1="7.5" x2="12" y2="13"/><circle cx="12" cy="16.3" r="0.6" fill="currentColor"/>',
+    printer: '<polyline points="6,8.5 6,3.5 18,3.5 18,8.5"/><rect x="4" y="8.5" width="16" height="8" rx="1.4"/><rect x="7" y="14" width="10" height="7" rx="1"/>',
+    building: '<rect x="4" y="3" width="16" height="18" rx="1.3"/><line x1="8" y1="7.5" x2="8" y2="7.6"/><line x1="12" y1="7.5" x2="12" y2="7.6"/><line x1="16" y1="7.5" x2="16" y2="7.6"/><line x1="8" y1="11.5" x2="8" y2="11.6"/><line x1="12" y1="11.5" x2="12" y2="11.6"/><line x1="16" y1="11.5" x2="16" y2="11.6"/><line x1="9" y1="21" x2="9" y2="16.5"/><line x1="15" y1="21" x2="15" y2="16.5"/>',
+    wallet: '<rect x="3" y="6.5" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.1" fill="currentColor" stroke="none"/>',
+    piggy: '<circle cx="12" cy="13" r="7.2"/><circle cx="15.5" cy="11" r="0.7" fill="currentColor" stroke="none"/><path d="M4.9 13H2.5l1.4-2.6"/><path d="M9 20.2v1.6M15 20.2v1.6"/>',
+    trend: '<polyline points="3,17 9,10.5 13.5,14 21,5.5"/><polyline points="15,5.5 21,5.5 21,11.5"/>',
+    cloud: '<path d="M7 18.5a4.5 4.5 0 0 1-.4-8.98A5.5 5.5 0 0 1 17.2 8.1 4 4 0 0 1 17 16.5"/><path d="M7 18.5h10"/>',
+    activity: '<polyline points="3,12.5 7.5,12.5 9.5,7 13,18 15,12.5 21,12.5"/>',
+    calendarOff: '<rect x="4" y="5" width="16" height="15.5" rx="2"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8.5" y1="14" x2="15.5" y2="19"/><line x1="15.5" y1="14" x2="8.5" y2="19"/>',
+  };
+  return `<svg ${common} class="icn">${paths[name] || ''}</svg>`;
+}
+
+/* ---------------- STATE ---------------- */
+
+const state = {
+  loading: true,
+  authed: false,
+  rememberedLogin: null,
+  credentials: DEFAULT_CREDENTIALS,
+  view: 'dashboard',
+  funcionarios: [],
+  lancamentos: [],
+  config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
+  empresa: { ...DEFAULT_EMPRESA },
+  supabase: { ...DEFAULT_SUPABASE },
+  anoAtivo: new Date().getFullYear(),
+  ui: {
+    modal: null,
+    funcSearch: '',
+    lancFuncionarioId: null,
+    lancMes: new Date().getMonth() + 1,
+    lancAno: new Date().getFullYear(),
+    folhaFuncionarioId: null,
+    folhaMes: new Date().getMonth() + 1,
+    folhaAno: new Date().getFullYear(),
+    lancTipo: 'provento',
+    loginShowPassword: false,
+    loginError: '',
+    pingResult: null,
+    pinging: false,
+    periodoMode: 'ano',
+    periodoMes: new Date().getMonth() + 1,
+    periodoAno: new Date().getFullYear(),
+    periodoInicio: `${new Date().getFullYear()}-01-01`,
+    periodoFim: new Date().toISOString().slice(0, 10),
+  },
+};
+
+const chartRegistry = {};
+function destroyChart(id) {
+  if (chartRegistry[id]) { chartRegistry[id].destroy(); delete chartRegistry[id]; }
+}
+
+const $ = (sel, root) => (root || document).querySelector(sel);
+const $all = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+/* ---------------- BOOTSTRAP ---------------- */
+
+/* ---------------- SUPABASE <-> STATE MAPPERS ---------------- */
+
+function funcToRow(f) {
+  return {
+    id: f.id, codigo: f.codigo || '', nome: f.nome || '', cpf: f.cpf || '', pis: f.pis || '',
+    ctps: f.ctps || '', serie: f.serie || '', funcao: f.funcao || '', cbo: f.cbo || '',
+    admissao: f.admissao || null, demissao: f.demissao || null,
+    salario_base: f.salarioBase || 0, dependentes: f.dependentes || 0,
+  };
+}
+function rowToFunc(r) {
+  return {
+    id: r.id, codigo: r.codigo || '', nome: r.nome || '', cpf: r.cpf || '', pis: r.pis || '',
+    ctps: r.ctps || '', serie: r.serie || '', funcao: r.funcao || '', cbo: r.cbo || '',
+    admissao: r.admissao || '', demissao: r.demissao || '',
+    salarioBase: Number(r.salario_base) || 0, dependentes: Number(r.dependentes) || 0,
+  };
+}
+function lancToRow(l) {
+  return {
+    id: l.id, funcionario_id: l.funcionarioId, ano: l.ano, mes: l.mes, tipo: l.tipo,
+    codigo: l.codigo || '', descricao: l.descricao || '', referencia: l.referencia || '', valor: l.valor || 0,
+  };
+}
+function rowToLanc(r) {
+  return {
+    id: r.id, funcionarioId: r.funcionario_id, ano: r.ano, mes: r.mes, tipo: r.tipo,
+    codigo: r.codigo || '', descricao: r.descricao || '', referencia: r.referencia || '', valor: Number(r.valor) || 0,
+  };
+}
+
+async function pullFromCloud() {
+  const cfg = state.supabase;
+  const [funcRows, lancRows, settingsRows] = await Promise.all([
+    supabaseSelect(cfg, 'funcionarios'),
+    supabaseSelect(cfg, 'lancamentos'),
+    supabaseSelect(cfg, 'app_settings', '?select=*&id=eq.1'),
+  ]);
+  state.funcionarios = funcRows.map(rowToFunc);
+  state.lancamentos = lancRows.map(rowToLanc);
+  if (settingsRows && settingsRows[0]) {
+    if (settingsRows[0].config) state.config = settingsRows[0].config;
+    if (settingsRows[0].empresa) state.empresa = settingsRows[0].empresa;
+  }
+}
+
+async function init() {
+  const [cred, remembered, func, lanc, cfg, emp, sup] = await Promise.all([
+    storageGet(STORAGE_KEYS.CRED),
+    storageGet(STORAGE_KEYS.REMEMBER),
+    storageGet(STORAGE_KEYS.FUNC),
+    storageGet(STORAGE_KEYS.LANC),
+    storageGet(STORAGE_KEYS.CONFIG),
+    storageGet(STORAGE_KEYS.EMPRESA),
+    storageGet(STORAGE_KEYS.SUPABASE),
+  ]);
+  if (cred) state.credentials = cred; else await storageSet(STORAGE_KEYS.CRED, DEFAULT_CREDENTIALS);
+  if (remembered) state.rememberedLogin = remembered;
+  if (func) state.funcionarios = func;
+  if (lanc) state.lancamentos = lanc;
+  if (cfg) state.config = cfg;
+  if (emp) state.empresa = emp;
+  if (sup) state.supabase = { ...DEFAULT_SUPABASE, ...sup };
+  if (state.supabase.enabled) {
+    try {
+      await pullFromCloud();
+    } catch (e) {
+      console.warn('Não foi possível carregar dados do Supabase — usando cache local.', e.message);
+    }
+  }
+  state.loading = false;
+  renderApp();
+}
+
+/* ---------------- ROOT RENDER ---------------- */
+
+
+function renderApp() {
+  const root = document.getElementById('app');
+  if (state.loading) {
+    root.innerHTML = `<div class="boot-screen"><div class="boot-spinner"></div></div>`;
+    return;
+  }
+  if (!state.authed) {
+    root.innerHTML = loginScreenHTML();
+    attachLoginListeners();
+    return;
+  }
+  root.innerHTML = `
+    <div class="app-shell">
+      ${sidebarHTML()}
+      <main class="app-main">
+        <div id="view-content"></div>
+      </main>
+    </div>
+    <div id="modal-root"></div>
+  `;
+  attachSidebarListeners();
+  renderView();
+  renderModal();
+}
+
+function renderView() {
+  const el = document.getElementById('view-content');
+  if (!el) return;
+  destroyChart('chartLiquido'); destroyChart('chartPie'); destroyChart('chartLine'); destroyChart('chartHead'); destroyChart('chartStatus');
+  if (state.view === 'dashboard') { el.innerHTML = dashboardHTML(); attachDashboardListeners(); mountDashboardCharts(); }
+  else if (state.view === 'funcionarios') { el.innerHTML = funcionariosHTML(); attachFuncionariosListeners(); }
+  else if (state.view === 'lancamentos') { el.innerHTML = lancamentosHTML(); attachLancamentosListeners(); }
+  else if (state.view === 'folha') { el.innerHTML = folhaHTML(); attachFolhaListeners(); }
+  else if (state.view === 'config') { el.innerHTML = configHTML(); attachConfigListeners(); }
+}
+
+/* ---------------- MODAL ---------------- */
+
+function openModal(html, onMount) {
+  state.ui.modal = { html, onMount };
+  renderModal();
+}
+function closeModal() {
+  state.ui.modal = null;
+  renderModal();
+}
+function renderModal() {
+  const root = document.getElementById('modal-root');
+  if (!root) return;
+  if (!state.ui.modal) { root.innerHTML = ''; return; }
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-card">${state.ui.modal.html}</div>
+    </div>
+  `;
+  $('#modal-overlay').addEventListener('mousedown', (e) => { if (e.target.id === 'modal-overlay') closeModal(); });
+  const closeBtn = $('.modal-close-btn');
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (state.ui.modal.onMount) state.ui.modal.onMount();
+}
+
+/* ---------------- LOGIN SCREEN ---------------- */
+
+function loginScreenHTML() {
+  const remembered = state.rememberedLogin;
+  return `
+    <div class="login-screen">
+      <div class="login-card">
+        <div class="login-brand">
+          <img src="data:image/png;base64,${LOGO_B64}" alt="Bom do Sul" class="login-logo" />
+          <p class="login-subtitle">Sistema de Folha de Pagamento</p>
+        </div>
+        <form id="login-form" class="login-form">
+          <label class="field-label" for="login-user">Usuário</label>
+          <div class="input-with-icon">
+            ${icon('user', 17)}
+            <input id="login-user" type="text" autocomplete="username" placeholder="seu.usuario" value="${escapeHtml(remembered?.username || '')}" />
+          </div>
+          <label class="field-label" for="login-pass">Senha</label>
+          <div class="input-with-icon">
+            ${icon('lock', 17)}
+            <input id="login-pass" type="password" autocomplete="current-password" placeholder="••••••••" value="${escapeHtml(remembered?.password || '')}" />
+            <button type="button" class="icon-toggle" id="toggle-pass" aria-label="Mostrar senha">${icon('eye', 17)}</button>
+          </div>
+          <label class="remember-row">
+            <input type="checkbox" id="login-remember" ${remembered ? 'checked' : ''} />
+            <span>Lembrar usuário e senha neste navegador</span>
+          </label>
+          <div id="login-error-slot"></div>
+          <button type="submit" class="btn btn-primary btn-block" id="login-submit">Entrar</button>
+          <p class="login-hint">Acesso padrão inicial: <strong>admin</strong> / <strong>admin123</strong></p>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function attachLoginListeners() {
+  const passInput = $('#login-pass');
+  const toggleBtn = $('#toggle-pass');
+  let showPass = false;
+  toggleBtn.addEventListener('click', () => {
+    showPass = !showPass;
+    passInput.type = showPass ? 'text' : 'password';
+    toggleBtn.innerHTML = showPass ? icon('eyeOff', 17) : icon('eye', 17);
+  });
+
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = $('#login-user').value.trim();
+    const password = $('#login-pass').value;
+    const remember = $('#login-remember').checked;
+    const errorSlot = $('#login-error-slot');
+    errorSlot.innerHTML = '';
+    if (!username || !password) {
+      errorSlot.innerHTML = `<div class="login-error">${icon('alert', 15)} Preencha usuário e senha.</div>`;
+      return;
+    }
+    const submitBtn = $('#login-submit');
+    submitBtn.disabled = true; submitBtn.textContent = 'Entrando...';
+    const current = (await storageGet(STORAGE_KEYS.CRED)) || state.credentials;
+    const ok = username === current.username && password === current.password;
+    if (ok) {
+      state.authed = true;
+      if (remember) await storageSet(STORAGE_KEYS.REMEMBER, { username, password });
+      else await storageSet(STORAGE_KEYS.REMEMBER, null);
+      renderApp();
+    } else {
+      submitBtn.disabled = false; submitBtn.textContent = 'Entrar';
+      errorSlot.innerHTML = `<div class="login-error">${icon('alert', 15)} Usuário ou senha incorretos.</div>`;
+    }
+  });
+}
+
+/* ---------------- SIDEBAR ---------------- */
+
+function sidebarHTML() {
+  const items = [
+    { id: 'dashboard', label: 'Dashboard', ic: 'grid' },
+    { id: 'funcionarios', label: 'Funcionários', ic: 'users' },
+    { id: 'lancamentos', label: 'Lançamentos', ic: 'clipboard' },
+    { id: 'folha', label: 'Folha de Pagamento', ic: 'sheet' },
+    { id: 'config', label: 'Configurações', ic: 'settings' },
+  ];
+  const sync = state.supabase.enabled
+    ? (state.ui.pingResult && state.ui.pingResult.ok ? { cls: 'cloud-ok', label: 'Nuvem conectada' } : { cls: 'cloud-warn', label: 'Nuvem ativa (não verificada)' })
+    : { cls: 'cloud-off', label: 'Somente local' };
+  return `
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <img src="data:image/png;base64,${LOGO_B64}" alt="${escapeHtml(state.empresa.marca)}" class="sidebar-logo" />
+        <div class="sidebar-company">
+          <strong>${escapeHtml(state.empresa.marca)}</strong>
+          <span>${escapeHtml(state.empresa.nome)}</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        ${items.map((it) => `
+          <button class="sidebar-item ${state.view === it.id ? 'active' : ''}" data-view="${it.id}">
+            ${icon(it.ic, 18)}<span>${it.label}</span>
+          </button>
+        `).join('')}
+      </nav>
+      <div class="sync-status ${sync.cls}" title="${sync.label}">${icon('cloud', 15)}<span>${sync.label}</span></div>
+      <button class="sidebar-logout" id="btn-logout">${icon('logout', 17)}<span>Sair</span></button>
+    </aside>
+  `;
+}
+
+function attachSidebarListeners() {
+  $all('.sidebar-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.view = btn.dataset.view;
+      renderApp();
+    });
+  });
+  $('#btn-logout').addEventListener('click', () => {
+    state.authed = false;
+    renderApp();
+  });
+}
+
+/* ---------------- DASHBOARD ---------------- */
+
+function funcionariosAtivos(ano, mes) {
+  return state.funcionarios.filter((f) => {
+    if (!f.admissao) return true;
+    const parts = f.admissao.split('-').map(Number);
+    const ay = parts[0], am = parts[1];
+    const depoisAdmissao = ay < ano || (ay === ano && am <= mes);
+    if (!depoisAdmissao) return false;
+    if (f.demissao) {
+      const dparts = f.demissao.split('-').map(Number);
+      const dy = dparts[0], dm = dparts[1];
+      const antesDemissao = ano < dy || (ano === dy && mes <= dm);
+      return antesDemissao;
+    }
+    return true;
+  });
+}
+
+function tenureDays(f) {
+  if (!f.admissao) return 0;
+  const start = new Date(f.admissao + 'T00:00:00');
+  const end = f.demissao ? new Date(f.demissao + 'T00:00:00') : new Date();
+  return Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+}
+
+function formatTenure(days) {
+  const years = Math.floor(days / 365.25);
+  const months = Math.floor((days - years * 365.25) / 30.44);
+  if (years <= 0 && months <= 0) return `${days} dia${days === 1 ? '' : 's'}`;
+  const parts = [];
+  if (years > 0) parts.push(`${years} ano${years > 1 ? 's' : ''}`);
+  if (months > 0) parts.push(`${months} ${months > 1 ? 'meses' : 'mês'}`);
+  return parts.join(' e ');
+}
+
+function computeDadosMensais(ano) {
+  return MONTHS_SHORT.map((label, idx) => {
+    const mes = idx + 1;
+    const ativos = funcionariosAtivos(ano, mes);
+    let proventos = 0, descontos = 0, liquido = 0, inss = 0, irrf = 0, fgts = 0;
+    ativos.forEach((f) => {
+      const folha = computeFolha(f, ano, mes, state.lancamentos, state.config);
+      proventos += folha.totalProventos;
+      descontos += folha.totalDescontos;
+      liquido += folha.salarioLiquido;
+      inss += folha.inssValor;
+      irrf += folha.irrfValor;
+      fgts += folha.fgtsValor;
+    });
+    return {
+      mes: label, mesNum: mes,
+      proventos: round2(proventos), descontos: round2(descontos), liquido: round2(liquido),
+      inss: round2(inss), irrf: round2(irrf), fgts: round2(fgts), headcount: ativos.length,
+    };
+  });
+}
+
+function rankingTenureHTML() {
+  const list = state.funcionarios.map((f) => ({ ...f, days: tenureDays(f) })).sort((a, b) => b.days - a.days).slice(0, 8);
+  const max = list.length ? Math.max(1, list[0].days) : 1;
+  return `
+    <div class="panel">
+      <h3>${icon('activity', 15)} Ranking — Tempo de empresa</h3>
+      ${list.length === 0 ? '<p class="empty-hint">Nenhum funcionário cadastrado.</p>' : list.map((f, idx) => `
+        <div class="rank-row">
+          <span class="rank-pos">${idx + 1}º</span>
+          <div class="rank-info">
+            <strong>${escapeHtml(f.nome)}</strong>
+            <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.round(f.days / max * 100)}%;background:${COLORS.teal}"></div></div>
+          </div>
+          <span class="rank-value">${formatTenure(f.days)}${f.demissao ? `<span class="rank-tag">desligado</span>` : ''}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function rankingSalarioHTML() {
+  const list = [...state.funcionarios].sort((a, b) => (b.salarioBase || 0) - (a.salarioBase || 0)).slice(0, 8);
+  const max = list.length ? Math.max(1, list[0].salarioBase || 1) : 1;
+  return `
+    <div class="panel">
+      <h3>${icon('trend', 15)} Ranking — Maiores salários</h3>
+      ${list.length === 0 ? '<p class="empty-hint">Nenhum funcionário cadastrado.</p>' : list.map((f, idx) => `
+        <div class="rank-row">
+          <span class="rank-pos">${idx + 1}º</span>
+          <div class="rank-info">
+            <strong>${escapeHtml(f.nome)}</strong>
+            <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.round((f.salarioBase || 0) / max * 100)}%;background:${COLORS.gold}"></div></div>
+          </div>
+          <span class="rank-value mono">${fmtBRL(f.salarioBase)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ---------------- FILTRO DE PERÍODO (dashboard) ---------------- */
+
+function enumerateMonthsInRange(startDate, endDate) {
+  const months = [];
+  let y = startDate.getFullYear(), m = startDate.getMonth() + 1;
+  const endY = endDate.getFullYear(), endM = endDate.getMonth() + 1;
+  let guard = 0;
+  while ((y < endY || (y === endY && m <= endM)) && guard < 600) {
+    months.push({ ano: y, mes: m });
+    m++; if (m > 12) { m = 1; y++; }
+    guard++;
+  }
+  return months;
+}
+
+function periodoMeses() {
+  const ui = state.ui;
+  if (ui.periodoMode === 'mes') {
+    return [{ ano: ui.periodoAno, mes: ui.periodoMes }];
+  }
+  if (ui.periodoMode === 'intervalo') {
+    if (!ui.periodoInicio || !ui.periodoFim) return [];
+    const start = new Date(ui.periodoInicio + 'T00:00:00');
+    const end = new Date(ui.periodoFim + 'T00:00:00');
+    if (isNaN(start) || isNaN(end) || start > end) return [];
+    return enumerateMonthsInRange(start, end);
+  }
+  return MONTHS_SHORT.map((_, idx) => ({ ano: state.anoAtivo, mes: idx + 1 }));
+}
+
+function periodoLabel() {
+  const ui = state.ui;
+  if (ui.periodoMode === 'mes') return `${MONTHS_PT[ui.periodoMes - 1]}/${ui.periodoAno}`;
+  if (ui.periodoMode === 'intervalo') return `${fmtDate(ui.periodoInicio)} a ${fmtDate(ui.periodoFim)}`;
+  return String(state.anoAtivo);
+}
+
+function computeStatsForPeriodo() {
+  const meses = periodoMeses();
+  let totalLiquido = 0, totalEncargos = 0;
+  meses.forEach(({ ano, mes }) => {
+    funcionariosAtivos(ano, mes).forEach((f) => {
+      const folha = computeFolha(f, ano, mes, state.lancamentos, state.config);
+      totalLiquido += folha.salarioLiquido;
+      totalEncargos += folha.inssValor + folha.irrfValor + folha.fgtsValor;
+    });
+  });
+  const numMeses = meses.length || 1;
+  return { totalLiquido: round2(totalLiquido), totalEncargos: round2(totalEncargos), media: round2(totalLiquido / numMeses), numMeses: meses.length };
+}
+
+function funcionariosDemitidosNoPeriodo() {
+  const meses = periodoMeses();
+  const chave = new Set(meses.map((m) => `${m.ano}-${m.mes}`));
+  return state.funcionarios
+    .filter((f) => {
+      if (!f.demissao) return false;
+      const [dy, dm] = f.demissao.split('-').map(Number);
+      return chave.has(`${dy}-${dm}`);
+    })
+    .sort((a, b) => new Date(b.demissao) - new Date(a.demissao));
+}
+
+function computeHeadcountStatusSeries(ano) {
+  return MONTHS_SHORT.map((label, idx) => {
+    const mes = idx + 1;
+    const ativos = funcionariosAtivos(ano, mes).length;
+    const demitidosAcumulado = state.funcionarios.filter((f) => {
+      if (!f.demissao) return false;
+      const [dy, dm] = f.demissao.split('-').map(Number);
+      return dy < ano || (dy === ano && dm <= mes);
+    }).length;
+    return { mes: label, ativos, demitidos: demitidosAcumulado };
+  });
+}
+
+function tabelaDemitidosHTML() {
+  const desligados = funcionariosDemitidosNoPeriodo();
+  return `
+    <div class="panel">
+      <h3>${icon('calendarOff', 15)} Colaboradores desligados — ${escapeHtml(periodoLabel())}</h3>
+      ${desligados.length === 0 ? '<p class="empty-hint">Nenhum desligamento no período selecionado.</p>' : `
+      <div class="table-wrap" style="border:none">
+        <table class="data-table">
+          <thead><tr><th>Nome</th><th>Função</th><th>Admissão</th><th>Demissão</th><th>Tempo de empresa</th><th>Salário base</th></tr></thead>
+          <tbody>
+            ${desligados.map((f) => `
+              <tr>
+                <td><strong>${escapeHtml(f.nome)}</strong></td>
+                <td>${escapeHtml(f.funcao || '—')}</td>
+                <td>${fmtDate(f.admissao)}</td>
+                <td>${fmtDate(f.demissao)}</td>
+                <td>${formatTenure(tenureDays(f))}</td>
+                <td class="mono">${fmtBRL(f.salarioBase)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+  `;
+}
+
+function dashboardCardsHTML(stats) {
+  return `
+    <div class="stat-card">
+      <div class="stat-icon" style="background:${COLORS.mossLight};color:${COLORS.moss}">${icon('users', 20)}</div>
+      <div><span class="stat-value">${state.funcionarios.length}</span><span class="stat-label">Funcionários cadastrados</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:${COLORS.goldLight};color:#8a6a1f">${icon('wallet', 20)}</div>
+      <div><span class="stat-value">${fmtBRL(stats.totalLiquido)}</span><span class="stat-label">Total líquido pago — ${escapeHtml(periodoLabel())}</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:${COLORS.brickLight};color:${COLORS.brick}">${icon('piggy', 20)}</div>
+      <div><span class="stat-value">${fmtBRL(stats.totalEncargos)}</span><span class="stat-label">INSS + IRRF + FGTS no período</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#E3EEF0;color:${COLORS.teal}">${icon('trend', 20)}</div>
+      <div><span class="stat-value">${fmtBRL(stats.media)}</span><span class="stat-label">Média mensal no período</span></div>
+    </div>
+  `;
+}
+
+function dashboardHTML() {
+  const anos = new Set([state.anoAtivo]);
+  state.funcionarios.forEach((f) => { if (f.admissao) anos.add(Number(f.admissao.slice(0, 4))); });
+  state.lancamentos.forEach((l) => anos.add(l.ano));
+  const anosArr = Array.from(anos).sort((a, b) => a - b);
+
+  const dadosMensais = computeDadosMensais(state.anoAtivo);
+  const mesAtualIdx = new Date().getMonth();
+  const dadosMesAtual = dadosMensais[mesAtualIdx];
+  const ui = state.ui;
+  const stats = computeStatsForPeriodo();
+
+  return `
+    <div class="view">
+      <div class="view-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p class="view-subtitle">Panorama da folha de pagamento ao longo do ano</p>
+        </div>
+        <select class="select-year" id="dash-year">
+          ${anosArr.map((a) => `<option value="${a}" ${a === state.anoAtivo ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="filters-bar">
+        <div class="form-field">
+          <label>Período dos indicadores</label>
+          <select id="dash-periodo-mode">
+            <option value="ano" ${ui.periodoMode === 'ano' ? 'selected' : ''}>Ano completo (${state.anoAtivo})</option>
+            <option value="mes" ${ui.periodoMode === 'mes' ? 'selected' : ''}>Mês específico</option>
+            <option value="intervalo" ${ui.periodoMode === 'intervalo' ? 'selected' : ''}>Intervalo de datas</option>
+          </select>
+        </div>
+        ${ui.periodoMode === 'mes' ? `
+          <div class="form-field">
+            <label>Mês</label>
+            <select id="dash-periodo-mes">${MONTHS_PT.map((m, idx) => `<option value="${idx + 1}" ${idx + 1 === ui.periodoMes ? 'selected' : ''}>${m}</option>`).join('')}</select>
+          </div>
+          <div class="form-field"><label>Ano</label><input id="dash-periodo-ano" type="number" value="${ui.periodoAno}" style="width:90px" /></div>
+        ` : ''}
+        ${ui.periodoMode === 'intervalo' ? `
+          <div class="form-field"><label>Data início</label><input id="dash-periodo-inicio" type="date" value="${ui.periodoInicio}" /></div>
+          <div class="form-field"><label>Data fim</label><input id="dash-periodo-fim" type="date" value="${ui.periodoFim}" /></div>
+        ` : ''}
+      </div>
+
+      <div class="cards-grid" id="dash-cards">${dashboardCardsHTML(stats)}</div>
+
+      <div class="panels-grid">
+        <div class="panel panel-wide">
+          <h3>Folha líquida por mês — ${state.anoAtivo}</h3>
+          <div class="chart-box"><canvas id="chart-liquido"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Composição — ${MONTHS_PT[mesAtualIdx]}</h3>
+          ${dadosMesAtual && (dadosMesAtual.liquido + dadosMesAtual.inss + dadosMesAtual.irrf + dadosMesAtual.fgts) > 0
+            ? `<div class="chart-box"><canvas id="chart-pie"></canvas></div>`
+            : `<p class="empty-hint">Sem lançamentos para o mês atual.</p>`}
+        </div>
+        <div class="panel panel-wide">
+          <h3>Proventos x Descontos por mês</h3>
+          <div class="chart-box"><canvas id="chart-line"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Quadro de funcionários</h3>
+          <div class="chart-box"><canvas id="chart-head"></canvas></div>
+        </div>
+        <div class="panel panel-span2">
+          <h3>Colaboradores ativos x demitidos (acumulado) — ${state.anoAtivo}</h3>
+          <div class="chart-box"><canvas id="chart-status"></canvas></div>
+        </div>
+        ${rankingTenureHTML()}
+        ${rankingSalarioHTML()}
+      </div>
+
+      <div class="dash-block" id="dash-demitidos-wrap">${tabelaDemitidosHTML()}</div>
+    </div>
+  `;
+}
+
+function attachDashboardListeners() {
+  $('#dash-year').addEventListener('change', (e) => {
+    state.anoAtivo = Number(e.target.value);
+    renderView();
+  });
+  $('#dash-periodo-mode').addEventListener('change', (e) => {
+    state.ui.periodoMode = e.target.value;
+    renderView();
+  });
+  const mesSel = $('#dash-periodo-mes');
+  if (mesSel) mesSel.addEventListener('change', (e) => { state.ui.periodoMes = Number(e.target.value); refreshDashboardIndicators(); });
+  const anoInput = $('#dash-periodo-ano');
+  if (anoInput) anoInput.addEventListener('change', (e) => { state.ui.periodoAno = Number(e.target.value) || state.ui.periodoAno; refreshDashboardIndicators(); });
+  const inicioInput = $('#dash-periodo-inicio');
+  if (inicioInput) inicioInput.addEventListener('change', (e) => { state.ui.periodoInicio = e.target.value; refreshDashboardIndicators(); });
+  const fimInput = $('#dash-periodo-fim');
+  if (fimInput) fimInput.addEventListener('change', (e) => { state.ui.periodoFim = e.target.value; refreshDashboardIndicators(); });
+
+  function refreshDashboardIndicators() {
+    $('#dash-cards').innerHTML = dashboardCardsHTML(computeStatsForPeriodo());
+    $('#dash-demitidos-wrap').innerHTML = tabelaDemitidosHTML();
+  }
+}
+
+function mountDashboardCharts() {
+  const dadosMensais = computeDadosMensais(state.anoAtivo);
+  const labels = dadosMensais.map((d) => d.mes);
+  const fontFamily = "'Inter', sans-serif";
+
+  const elLiquido = document.getElementById('chart-liquido');
+  if (elLiquido) {
+    chartRegistry.chartLiquido = new Chart(elLiquido, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Salário líquido', data: dadosMensais.map((d) => d.liquido), backgroundColor: COLORS.teal, borderRadius: 6, maxBarThickness: 34 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtBRL(c.parsed.y) } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: fontFamily, size: 11 }, color: COLORS.mutedTeal } },
+          y: { grid: { color: COLORS.border }, ticks: { font: { family: fontFamily, size: 10 }, color: COLORS.mutedTeal, callback: (v) => 'R$' + (v / 1000).toFixed(0) + 'k' } },
+        },
+      },
+    });
+  }
+
+  const mesAtualIdx = new Date().getMonth();
+  const dadosMesAtual = dadosMensais[mesAtualIdx];
+  const elPie = document.getElementById('chart-pie');
+  if (elPie && dadosMesAtual) {
+    const pieData = [
+      { name: 'Salário líquido', value: dadosMesAtual.liquido, color: COLORS.teal },
+      { name: 'INSS', value: dadosMesAtual.inss, color: COLORS.brick },
+      { name: 'IRRF', value: dadosMesAtual.irrf, color: COLORS.gold },
+      { name: 'FGTS (depósito)', value: dadosMesAtual.fgts, color: COLORS.moss },
+    ].filter((d) => d.value > 0);
+    chartRegistry.chartPie = new Chart(elPie, {
+      type: 'doughnut',
+      data: { labels: pieData.map((d) => d.name), datasets: [{ data: pieData.map((d) => d.value), backgroundColor: pieData.map((d) => d.color), borderWidth: 2, borderColor: '#fff' }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '58%',
+        plugins: { legend: { position: 'bottom', labels: { font: { family: fontFamily, size: 11 }, color: COLORS.ink, boxWidth: 12, padding: 12 } },
+          tooltip: { callbacks: { label: (c) => `${c.label}: ${fmtBRL(c.parsed)}` } } },
+      },
+    });
+  }
+
+  const elLine = document.getElementById('chart-line');
+  if (elLine) {
+    chartRegistry.chartLine = new Chart(elLine, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Proventos', data: dadosMensais.map((d) => d.proventos), borderColor: COLORS.moss, backgroundColor: COLORS.moss, tension: 0.35, pointRadius: 3 },
+          { label: 'Descontos', data: dadosMensais.map((d) => d.descontos), borderColor: COLORS.brick, backgroundColor: COLORS.brick, tension: 0.35, pointRadius: 3 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { family: fontFamily, size: 11 }, color: COLORS.ink, boxWidth: 12 } },
+          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmtBRL(c.parsed.y)}` } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: fontFamily, size: 11 }, color: COLORS.mutedTeal } },
+          y: { grid: { color: COLORS.border }, ticks: { font: { family: fontFamily, size: 10 }, color: COLORS.mutedTeal, callback: (v) => 'R$' + (v / 1000).toFixed(0) + 'k' } },
+        },
+      },
+    });
+  }
+
+  const elHead = document.getElementById('chart-head');
+  if (elHead) {
+    chartRegistry.chartHead = new Chart(elHead, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Funcionários ativos', data: dadosMensais.map((d) => d.headcount), backgroundColor: COLORS.gold, borderRadius: 6, maxBarThickness: 30 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {} },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: fontFamily, size: 11 }, color: COLORS.mutedTeal } },
+          y: { grid: { color: COLORS.border }, ticks: { precision: 0, font: { family: fontFamily, size: 10 }, color: COLORS.mutedTeal } },
+        },
+      },
+    });
+  }
+
+  const elStatus = document.getElementById('chart-status');
+  if (elStatus) {
+    const statusData = computeHeadcountStatusSeries(state.anoAtivo);
+    chartRegistry.chartStatus = new Chart(elStatus, {
+      type: 'bar',
+      data: {
+        labels: statusData.map((d) => d.mes),
+        datasets: [
+          { label: 'Ativos', data: statusData.map((d) => d.ativos), backgroundColor: COLORS.teal, borderRadius: 6, maxBarThickness: 26 },
+          { label: 'Demitidos (acumulado)', data: statusData.map((d) => d.demitidos), backgroundColor: COLORS.brick, borderRadius: 6, maxBarThickness: 26 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { family: fontFamily, size: 11 }, color: COLORS.ink, boxWidth: 12 } }, tooltip: {} },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: fontFamily, size: 11 }, color: COLORS.mutedTeal } },
+          y: { grid: { color: COLORS.border }, ticks: { precision: 0, font: { family: fontFamily, size: 10 }, color: COLORS.mutedTeal } },
+        },
+      },
+    });
+  }
+}
+
+/* ---------------- FUNCIONÁRIOS ---------------- */
+
+const FUNC_BLANK = { codigo: '', nome: '', cpf: '', pis: '', ctps: '', serie: '', funcao: '', cbo: '', admissao: '', demissao: '', salarioBase: '', dependentes: 0 };
+
+function nextFuncCodigo() {
+  const max = state.funcionarios.reduce((m, f) => {
+    const n = parseInt(f.codigo, 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return String(max + 1).padStart(6, '0');
+}
+
+function funcionariosHTML() {
+  const search = state.ui.funcSearch.toLowerCase();
+  const filtered = state.funcionarios.filter((f) =>
+    f.nome.toLowerCase().includes(search) || (f.cpf || '').includes(state.ui.funcSearch) || (f.codigo || '').includes(state.ui.funcSearch)
+  );
+  return `
+    <div class="view">
+      <div class="view-header">
+        <div>
+          <h1>Funcionários</h1>
+          <p class="view-subtitle">Cadastro de colaboradores</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-func">${icon('plus', 16)} Novo funcionário</button>
+      </div>
+      <div class="toolbar">
+        <div class="search-box">${icon('search', 16)}<input id="func-search" placeholder="Buscar por nome, CPF ou código..." value="${escapeHtml(state.ui.funcSearch)}" /></div>
+        <span class="toolbar-count" id="func-count">${filtered.length} de ${state.funcionarios.length} funcionário(s)</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Código</th><th>Nome</th><th>Função</th><th>Admissão</th><th>Status</th><th>Salário base</th><th style="width:100px"></th></tr></thead>
+          <tbody id="func-tbody">${funcionariosRowsHTML(filtered)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function funcionariosRowsHTML(list) {
+  if (list.length === 0) return `<tr><td colspan="7" class="empty-row">Nenhum funcionário cadastrado ainda.</td></tr>`;
+  return list.map((f) => `
+    <tr>
+      <td class="mono">${escapeHtml(f.codigo)}</td>
+      <td><strong>${escapeHtml(f.nome)}</strong><div class="table-subtext">${escapeHtml(f.cpf || '')}</div></td>
+      <td>${escapeHtml(f.funcao || '—')}</td>
+      <td>${fmtDate(f.admissao)}</td>
+      <td>${f.demissao ? `<span class="status-badge status-off">Desligado ${fmtDate(f.demissao)}</span>` : `<span class="status-badge status-on">Ativo</span>`}</td>
+      <td class="mono">${fmtBRL(f.salarioBase)}</td>
+      <td><div class="row-actions">
+        <button class="icon-btn" data-edit="${f.id}" aria-label="Editar">${icon('pencil', 15)}</button>
+        <button class="icon-btn icon-btn-danger" data-delete="${f.id}" aria-label="Excluir">${icon('trash', 15)}</button>
+      </div></td>
+    </tr>
+  `).join('');
+}
+
+function funcionarioFormHTML(existing) {
+  const f = existing || { ...FUNC_BLANK, codigo: nextFuncCodigo() };
+  return `
+    <div class="modal-header"><h3>${existing ? 'Editar funcionário' : 'Novo funcionário'}</h3><button class="icon-btn modal-close-btn">${icon('x', 18)}</button></div>
+    <div class="modal-body">
+      <form id="func-form" class="form-grid">
+        <div class="form-field"><label>Código</label><input id="f-codigo" value="${escapeHtml(f.codigo)}" placeholder="000106" /></div>
+        <div class="form-field span-2"><label>Nome completo *</label><input id="f-nome" value="${escapeHtml(f.nome)}" placeholder="Nome do colaborador" required /></div>
+        <div class="form-field"><label>CPF</label><input id="f-cpf" value="${escapeHtml(f.cpf)}" placeholder="059.138.359-48" /></div>
+        <div class="form-field"><label>PIS</label><input id="f-pis" value="${escapeHtml(f.pis)}" placeholder="200.65987.90-4" /></div>
+        <div class="form-field"><label>CTPS</label><input id="f-ctps" value="${escapeHtml(f.ctps)}" placeholder="0591383" /></div>
+        <div class="form-field"><label>Série</label><input id="f-serie" value="${escapeHtml(f.serie)}" placeholder="5948" /></div>
+        <div class="form-field span-2"><label>Função</label><input id="f-funcao" value="${escapeHtml(f.funcao)}" placeholder="Aux. de linha de produção" /></div>
+        <div class="form-field"><label>CBO</label><input id="f-cbo" value="${escapeHtml(f.cbo)}" placeholder="782-05" /></div>
+        <div class="form-field"><label>Admissão</label><input id="f-admissao" type="date" value="${escapeHtml(f.admissao)}" /></div>
+        <div class="form-field"><label>Demissão</label><input id="f-demissao" type="date" value="${escapeHtml(f.demissao || '')}" /></div>
+        <div class="form-field"><label>Salário base (R$) *</label><input id="f-salario" type="number" step="0.01" min="0" value="${f.salarioBase}" required /></div>
+        <div class="form-field"><label>Dependentes (IRRF)</label><input id="f-dependentes" type="number" min="0" value="${f.dependentes || 0}" /></div>
+        <div class="form-actions span-2">
+          <button type="button" class="btn btn-ghost modal-close-btn">Cancelar</button>
+          <button type="submit" class="btn btn-primary">${icon('check', 16)} Salvar funcionário</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function confirmDeleteFuncHTML(f) {
+  return `
+    <div class="modal-header"><h3>Excluir funcionário</h3><button class="icon-btn modal-close-btn">${icon('x', 18)}</button></div>
+    <div class="modal-body">
+      <p>Tem certeza que deseja excluir <strong>${escapeHtml(f.nome)}</strong>? Os lançamentos vinculados a este funcionário permanecerão no histórico.</p>
+      <div class="form-actions" style="margin-top:20px">
+        <button class="btn btn-ghost modal-close-btn">Cancelar</button>
+        <button class="btn btn-danger" id="confirm-delete-func">${icon('trash', 16)} Excluir</button>
+      </div>
+    </div>
+  `;
+}
+
+function attachFuncionariosListeners() {
+  $('#btn-new-func').addEventListener('click', () => openFuncForm(null));
+
+  const searchInput = $('#func-search');
+  searchInput.addEventListener('input', (e) => {
+    state.ui.funcSearch = e.target.value;
+    const search = state.ui.funcSearch.toLowerCase();
+    const filtered = state.funcionarios.filter((f) =>
+      f.nome.toLowerCase().includes(search) || (f.cpf || '').includes(state.ui.funcSearch) || (f.codigo || '').includes(state.ui.funcSearch)
+    );
+    $('#func-tbody').innerHTML = funcionariosRowsHTML(filtered);
+    $('#func-count').textContent = `${filtered.length} de ${state.funcionarios.length} funcionário(s)`;
+    bindRowActions();
+  });
+
+  bindRowActions();
+
+  function bindRowActions() {
+    $all('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
+      const f = state.funcionarios.find((x) => x.id === btn.dataset.edit);
+      openFuncForm(f);
+    }));
+    $all('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
+      const f = state.funcionarios.find((x) => x.id === btn.dataset.delete);
+      openModal(confirmDeleteFuncHTML(f), () => {
+        $('#confirm-delete-func').addEventListener('click', () => {
+          state.funcionarios = state.funcionarios.filter((x) => x.id !== f.id);
+          storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
+          cloudSyncDelete('funcionarios', f.id);
+          closeModal();
+          renderView();
+        });
+      });
+    }));
+  }
+}
+
+function openFuncForm(existing) {
+  openModal(funcionarioFormHTML(existing), () => {
+    $('#func-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nome = $('#f-nome').value.trim();
+      const salario = $('#f-salario').value;
+      if (!nome || !salario) return;
+      const data = {
+        codigo: $('#f-codigo').value.trim(),
+        nome, cpf: $('#f-cpf').value.trim(), pis: $('#f-pis').value.trim(),
+        ctps: $('#f-ctps').value.trim(), serie: $('#f-serie').value.trim(),
+        funcao: $('#f-funcao').value.trim(), cbo: $('#f-cbo').value.trim(),
+        admissao: $('#f-admissao').value, demissao: $('#f-demissao').value,
+        salarioBase: Number(salario), dependentes: Number($('#f-dependentes').value || 0),
+      };
+      let saved;
+      if (existing) {
+        saved = { ...existing, ...data };
+        state.funcionarios = state.funcionarios.map((f) => f.id === existing.id ? saved : f);
+      } else {
+        saved = { ...data, id: uid() };
+        state.funcionarios = [...state.funcionarios, saved];
+      }
+      storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
+      cloudSyncUpsert('funcionarios', funcToRow(saved));
+      closeModal();
+      renderView();
+    });
+  });
+}
+
+/* ---------------- LANÇAMENTOS ---------------- */
+
+function lancamentosHTML() {
+  if (!state.ui.lancFuncionarioId && state.funcionarios.length) state.ui.lancFuncionarioId = state.funcionarios[0].id;
+  const funcionario = state.funcionarios.find((f) => f.id === state.ui.lancFuncionarioId);
+
+  return `
+    <div class="view">
+      <div class="view-header">
+        <div><h1>Lançamentos</h1><p class="view-subtitle">Proventos e descontos por funcionário e competência</p></div>
+      </div>
+      <div class="filters-bar">
+        <div class="form-field">
+          <label>Funcionário</label>
+          <select id="lanc-func">
+            ${state.funcionarios.length === 0 ? '<option value="">Nenhum cadastrado</option>' : ''}
+            ${state.funcionarios.map((f) => `<option value="${f.id}" ${f.id === state.ui.lancFuncionarioId ? 'selected' : ''}>${escapeHtml(f.nome)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Mês</label>
+          <select id="lanc-mes">${MONTHS_PT.map((m, idx) => `<option value="${idx + 1}" ${idx + 1 === state.ui.lancMes ? 'selected' : ''}>${m}</option>`).join('')}</select>
+        </div>
+        <div class="form-field"><label>Ano</label><input id="lanc-ano" type="number" value="${state.ui.lancAno}" style="width:90px" /></div>
+        <button class="btn btn-primary" id="btn-new-lanc" style="margin-left:auto" ${!funcionario ? 'disabled' : ''}>${icon('plus', 16)} Novo lançamento</button>
+      </div>
+      <div id="lanc-content">${lancContentHTML()}</div>
+    </div>
+  `;
+}
+
+function lancContentHTML() {
+  const funcionario = state.funcionarios.find((f) => f.id === state.ui.lancFuncionarioId);
+  if (!funcionario) return `<p class="empty-hint">Cadastre um funcionário para lançar proventos e descontos.</p>`;
+  const itens = state.lancamentos.filter((l) => l.funcionarioId === state.ui.lancFuncionarioId && l.ano === state.ui.lancAno && l.mes === state.ui.lancMes);
+  const proventos = itens.filter((i) => i.tipo === 'provento');
+  const descontos = itens.filter((i) => i.tipo === 'desconto');
+  const itemHTML = (i) => `
+    <div class="lanc-item">
+      <div><strong>${escapeHtml(i.descricao)}</strong><div class="table-subtext">Cód. ${escapeHtml(i.codigo)}${i.referencia ? ` · Ref. ${escapeHtml(i.referencia)}` : ''}</div></div>
+      <div class="lanc-item-right"><span class="mono">${fmtBRL(i.valor)}</span><button class="icon-btn icon-btn-danger" data-remove-lanc="${i.id}">${icon('trash', 14)}</button></div>
+    </div>`;
+  return `
+    <div class="lanc-columns">
+      <div class="lanc-col">
+        <h3 class="lanc-col-title lanc-col-title-moss">Proventos</h3>
+        ${proventos.length === 0 ? '<p class="empty-hint">Nenhum provento lançado nesta competência.</p>' : proventos.map(itemHTML).join('')}
+      </div>
+      <div class="lanc-col">
+        <h3 class="lanc-col-title lanc-col-title-brick">Descontos</h3>
+        ${descontos.length === 0 ? '<p class="empty-hint">Nenhum desconto lançado nesta competência.</p>' : descontos.map(itemHTML).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function lancamentoFormHTML() {
+  return `
+    <div class="modal-header"><h3>Novo lançamento</h3><button class="icon-btn modal-close-btn">${icon('x', 18)}</button></div>
+    <div class="modal-body">
+      <div class="tipo-toggle">
+        <button type="button" class="lanc-tipo-btn active" data-tipo="provento">Provento</button>
+        <button type="button" class="lanc-tipo-btn" data-tipo="desconto">Desconto</button>
+      </div>
+      <div class="chip-row" id="lanc-chip-row">${lancChipsHTML('provento')}</div>
+      <form id="lanc-form" class="form-grid">
+        <div class="form-field"><label>Código</label><input id="l-codigo" placeholder="099" /></div>
+        <div class="form-field span-2"><label>Descrição *</label><input id="l-descricao" placeholder="Descrição do lançamento" required /></div>
+        <div class="form-field"><label>Referência</label><input id="l-referencia" placeholder="1,00 / 8h / 30 dias" /></div>
+        <div class="form-field"><label>Valor (R$) *</label><input id="l-valor" type="number" step="0.01" min="0" required /></div>
+        <div class="form-actions span-2">
+          <button type="button" class="btn btn-ghost modal-close-btn">Fechar</button>
+          <button type="submit" class="btn btn-moss" id="lanc-submit-btn">${icon('plus', 16)} Adicionar provento</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function lancChipsHTML(tipo) {
+  const catalogo = tipo === 'provento' ? CODIGOS_PROVENTO : CODIGOS_DESCONTO;
+  return catalogo.map((c) => `<button type="button" class="chip" data-codigo="${c.codigo}" data-desc="${escapeHtml(c.descricao)}">${escapeHtml(c.descricao)}</button>`).join('');
+}
+
+function attachLancamentosListeners() {
+  $('#lanc-func').addEventListener('change', (e) => { state.ui.lancFuncionarioId = e.target.value; refreshLancContent(); });
+  $('#lanc-mes').addEventListener('change', (e) => { state.ui.lancMes = Number(e.target.value); refreshLancContent(); });
+  $('#lanc-ano').addEventListener('change', (e) => { state.ui.lancAno = Number(e.target.value) || state.ui.lancAno; refreshLancContent(); });
+  const newBtn = $('#btn-new-lanc');
+  if (newBtn) newBtn.addEventListener('click', openLancForm);
+  bindRemoveButtons();
+
+  function refreshLancContent() {
+    $('#lanc-content').innerHTML = lancContentHTML();
+    bindRemoveButtons();
+  }
+  function bindRemoveButtons() {
+    $all('[data-remove-lanc]').forEach((btn) => btn.addEventListener('click', () => {
+      state.lancamentos = state.lancamentos.filter((l) => l.id !== btn.dataset.removeLanc);
+      storageSet(STORAGE_KEYS.LANC, state.lancamentos);
+      cloudSyncDelete('lancamentos', btn.dataset.removeLanc);
+      refreshLancContent();
+    }));
+  }
+}
+
+function openLancForm() {
+  let tipo = 'provento';
+  openModal(lancamentoFormHTML(), () => {
+    $all('.lanc-tipo-btn').forEach((btn) => btn.addEventListener('click', () => {
+      tipo = btn.dataset.tipo;
+      $all('.lanc-tipo-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      $('#lanc-chip-row').innerHTML = lancChipsHTML(tipo);
+      $('#l-codigo').value = ''; $('#l-descricao').value = '';
+      bindChips();
+      $('#lanc-submit-btn').className = 'btn ' + (tipo === 'provento' ? 'btn-moss' : 'btn-brick');
+      $('#lanc-submit-btn').innerHTML = `${icon('plus', 16)} Adicionar ${tipo === 'provento' ? 'provento' : 'desconto'}`;
+    }));
+    bindChips();
+    function bindChips() {
+      $all('.chip').forEach((chip) => chip.addEventListener('click', () => {
+        $('#l-codigo').value = chip.dataset.codigo;
+        $('#l-descricao').value = chip.dataset.desc;
+        $all('.chip').forEach((c) => c.classList.toggle('chip-active', c === chip));
+      }));
+    }
+    $('#lanc-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const descricao = $('#l-descricao').value.trim();
+      const valor = $('#l-valor').value;
+      if (!descricao || !valor) return;
+      const novoLanc = {
+        id: uid(), funcionarioId: state.ui.lancFuncionarioId, ano: state.ui.lancAno, mes: state.ui.lancMes,
+        tipo, codigo: $('#l-codigo').value.trim() || '—', descricao, referencia: $('#l-referencia').value.trim(), valor: Number(valor),
+      };
+      state.lancamentos = [...state.lancamentos, novoLanc];
+      storageSet(STORAGE_KEYS.LANC, state.lancamentos);
+      cloudSyncUpsert('lancamentos', lancToRow(novoLanc));
+      closeModal();
+      renderView();
+    });
+  });
+}
+
+/* ---------------- FOLHA DE PAGAMENTO ---------------- */
+
+function folhaHTML() {
+  if (!state.ui.folhaFuncionarioId && state.funcionarios.length) state.ui.folhaFuncionarioId = state.funcionarios[0].id;
+  const funcionario = state.funcionarios.find((f) => f.id === state.ui.folhaFuncionarioId);
+  return `
+    <div class="view">
+      <div class="view-header">
+        <div><h1>Folha de Pagamento</h1><p class="view-subtitle">Geração de recibo individual por competência</p></div>
+      </div>
+      <div class="filters-bar no-print">
+        <div class="form-field">
+          <label>Funcionário</label>
+          <select id="folha-func">
+            ${state.funcionarios.length === 0 ? '<option value="">Nenhum cadastrado</option>' : ''}
+            ${state.funcionarios.map((f) => `<option value="${f.id}" ${f.id === state.ui.folhaFuncionarioId ? 'selected' : ''}>${escapeHtml(f.nome)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Mês</label>
+          <select id="folha-mes">${MONTHS_PT.map((m, idx) => `<option value="${idx + 1}" ${idx + 1 === state.ui.folhaMes ? 'selected' : ''}>${m}</option>`).join('')}</select>
+        </div>
+        <div class="form-field"><label>Ano</label><input id="folha-ano" type="number" value="${state.ui.folhaAno}" style="width:90px" /></div>
+        ${funcionario ? `<button class="btn btn-primary" id="btn-print" style="margin-left:auto">${icon('printer', 16)} Imprimir recibo</button>` : ''}
+      </div>
+      <div id="folha-content">${folhaContentHTML()}</div>
+    </div>
+  `;
+}
+
+function folhaContentHTML() {
+  const funcionario = state.funcionarios.find((f) => f.id === state.ui.folhaFuncionarioId);
+  if (!funcionario) return `<p class="empty-hint">Cadastre um funcionário para gerar a folha de pagamento.</p>`;
+  const folha = computeFolha(funcionario, state.ui.folhaAno, state.ui.folhaMes, state.lancamentos, state.config);
+  return payslipHTML(folha);
+}
+
+function payslipHTML(folha) {
+  const { funcionario, ano, mes, proventos, descontosLanc, totalProventos, baseINSS, inssValor, baseFGTS, fgtsValor, baseIRRF, irrfValor, totalDescontos, salarioLiquido } = folha;
+  const linhasDesconto = [
+    ...(inssValor > 0 ? [{ codigo: '91005', descricao: 'INSS' , valor: inssValor }] : []),
+    ...(irrfValor > 0 ? [{ codigo: '91006', descricao: 'IRRF', valor: irrfValor }] : []),
+    ...descontosLanc,
+  ];
+  return `
+    <div class="payslip" id="payslip-print-area">
+      <div class="payslip-header">
+        <img src="data:image/png;base64,${LOGO_B64}" alt="" class="payslip-logo" />
+        <div><strong>${escapeHtml(state.empresa.nome)}</strong><div class="payslip-meta">CNPJ ${escapeHtml(state.empresa.cnpj)} · ${escapeHtml(state.empresa.endereco)}</div></div>
+        <div class="payslip-competencia"><span>Recibo de Pagamento de Salário</span><strong>${MONTHS_PT[mes - 1]} / ${ano}</strong></div>
+      </div>
+      <div class="payslip-funcionario">
+        <div><span>Código</span><strong>${escapeHtml(funcionario.codigo || '—')}</strong></div>
+        <div class="grow"><span>Nome</span><strong>${escapeHtml(funcionario.nome)}</strong></div>
+        <div><span>Função</span><strong>${escapeHtml(funcionario.funcao || '—')}</strong></div>
+        <div><span>CBO</span><strong>${escapeHtml(funcionario.cbo || '—')}</strong></div>
+      </div>
+      <div class="payslip-funcionario">
+        <div><span>CPF</span><strong>${escapeHtml(funcionario.cpf || '—')}</strong></div>
+        <div><span>PIS</span><strong>${escapeHtml(funcionario.pis || '—')}</strong></div>
+        <div><span>CTPS/Série</span><strong>${escapeHtml(funcionario.ctps || '—')}${funcionario.serie ? '/' + escapeHtml(funcionario.serie) : ''}</strong></div>
+        <div><span>Admissão</span><strong>${fmtDate(funcionario.admissao)}</strong></div>
+      </div>
+      <table class="payslip-table">
+        <thead><tr><th>Cód.</th><th>Descrição</th><th>Referência</th><th>Proventos</th><th>Descontos</th></tr></thead>
+        <tbody>
+          ${proventos.map((p) => `<tr><td class="mono">${escapeHtml(p.codigo)}</td><td>${escapeHtml(p.descricao)}</td><td class="mono">${escapeHtml(p.referencia || '—')}</td><td class="mono num-positive">${fmtBRL(p.valor)}</td><td></td></tr>`).join('')}
+          ${linhasDesconto.map((d) => `<tr><td class="mono">${escapeHtml(d.codigo)}</td><td>${escapeHtml(d.descricao)}</td><td class="mono">${escapeHtml(d.referencia || '—')}</td><td></td><td class="mono num-negative">${fmtBRL(d.valor)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="payslip-bases">
+        <div><span>Base INSS</span><strong>${fmtBRL(baseINSS)}</strong></div>
+        <div><span>Base FGTS</span><strong>${fmtBRL(baseFGTS)}</strong></div>
+        <div><span>Valor FGTS (info.)</span><strong>${fmtBRL(fgtsValor)}</strong></div>
+        <div><span>Base IRRF</span><strong>${fmtBRL(baseIRRF)}</strong></div>
+      </div>
+      <div class="payslip-totals">
+        <div><span>Total de proventos</span><strong class="num-positive">${fmtBRL(totalProventos)}</strong></div>
+        <div><span>Total de descontos</span><strong class="num-negative">${fmtBRL(totalDescontos)}</strong></div>
+        <div class="payslip-liquido"><span>Salário líquido</span><strong>${fmtBRL(salarioLiquido)}</strong></div>
+      </div>
+      <div class="payslip-signature">
+        <p>Declaro ter recebido o valor líquido deste recibo.</p>
+        <div class="signature-line">Assinatura do Colaborador</div>
+      </div>
+    </div>
+  `;
+}
+
+function attachFolhaListeners() {
+  $('#folha-func').addEventListener('change', (e) => { state.ui.folhaFuncionarioId = e.target.value; refreshFolha(); });
+  $('#folha-mes').addEventListener('change', (e) => { state.ui.folhaMes = Number(e.target.value); refreshFolha(); });
+  $('#folha-ano').addEventListener('change', (e) => { state.ui.folhaAno = Number(e.target.value) || state.ui.folhaAno; refreshFolha(); });
+  const printBtn = $('#btn-print');
+  if (printBtn) printBtn.addEventListener('click', () => window.print());
+
+  function refreshFolha() { $('#folha-content').innerHTML = folhaContentHTML(); }
+}
+
+/* ---------------- CONFIGURAÇÕES ---------------- */
+
+function configHTML() {
+  const c = state.config;
+  const e = state.empresa;
+  return `
+    <div class="view">
+      <div class="view-header">
+        <div><h1>Configurações</h1><p class="view-subtitle">Dados da empresa e tabelas de cálculo</p></div>
+        <button class="btn btn-primary" id="btn-save-config">${icon('check', 16)} <span id="save-config-label">Salvar alterações</span></button>
+      </div>
+
+      <div class="panel">
+        <h3>${icon('building', 16)} Dados da empresa</h3>
+        <div class="form-grid">
+          <div class="form-field span-2"><label>Razão social</label><input id="cfg-nome" value="${escapeHtml(e.nome)}" /></div>
+          <div class="form-field"><label>Nome da marca</label><input id="cfg-marca" value="${escapeHtml(e.marca)}" /></div>
+          <div class="form-field"><label>CNPJ</label><input id="cfg-cnpj" value="${escapeHtml(e.cnpj)}" /></div>
+          <div class="form-field span-2"><label>Endereço</label><input id="cfg-endereco" value="${escapeHtml(e.endereco)}" /></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Tabela INSS (contribuição do empregado)</h3>
+        <p class="empty-hint" style="margin-bottom:12px">Valores de referência — atualize conforme a tabela vigente da Receita Federal/INSS.</p>
+        <table class="config-table">
+          <thead><tr><th>Faixa até (R$)</th><th>Alíquota (%)</th></tr></thead>
+          <tbody>
+            ${c.inss.map((row, idx) => `
+              <tr><td><input data-inss-ate="${idx}" type="number" step="0.01" value="${row.ate}" /></td>
+              <td><input data-inss-aliq="${idx}" type="number" step="0.01" value="${row.aliquota}" /></td></tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Tabela IRRF</h3>
+        <table class="config-table">
+          <thead><tr><th>Faixa até (R$)</th><th>Alíquota (%)</th><th>Parcela a deduzir (R$)</th></tr></thead>
+          <tbody>
+            ${c.irrf.map((row, idx) => `
+              <tr>
+                <td><input data-irrf-ate="${idx}" type="number" step="0.01" value="${row.ate >= 99999999 ? '' : row.ate}" placeholder="${row.ate >= 99999999 ? 'Acima disso' : ''}" /></td>
+                <td><input data-irrf-aliq="${idx}" type="number" step="0.01" value="${row.aliquota}" /></td>
+                <td><input data-irrf-deducao="${idx}" type="number" step="0.01" value="${row.deducao}" /></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="form-grid" style="margin-top:16px">
+          <div class="form-field"><label>Dedução por dependente (R$)</label><input id="cfg-dependente" type="number" step="0.01" value="${c.deducaoPorDependente}" /></div>
+          <div class="form-field"><label>Alíquota FGTS (%)</label><input id="cfg-fgts" type="number" step="0.01" value="${c.fgtsRate}" /></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>${icon('cloud', 16)} Integração Supabase (nuvem)</h3>
+        <p class="empty-hint" style="margin-bottom:14px">Sincroniza funcionários, lançamentos e configurações com um projeto Supabase — útil para acessar os dados de mais de um computador.</p>
+        <div class="form-grid">
+          <div class="form-field span-2"><label>URL do projeto</label><input id="sb-url" value="${escapeHtml(state.supabase.url)}" placeholder="https://xxxx.supabase.co" /></div>
+          <div class="form-field span-2">
+            <label>Chave anon (public)</label>
+            <div class="input-with-icon">
+              <input id="sb-key" type="password" value="${escapeHtml(state.supabase.anonKey)}" placeholder="eyJhbGciOi..." />
+              <button type="button" class="icon-toggle" id="sb-toggle-key" aria-label="Mostrar chave">${icon('eye', 17)}</button>
+            </div>
+          </div>
+        </div>
+        <label class="remember-row" style="margin-top:14px">
+          <input type="checkbox" id="sb-enabled" ${state.supabase.enabled ? 'checked' : ''} />
+          <span>Sincronizar automaticamente com o Supabase (além do armazenamento local)</span>
+        </label>
+        <div class="sb-actions">
+          <button type="button" class="btn btn-ghost" id="sb-ping">${icon('activity', 15)} Testar conexão</button>
+          <button type="button" class="btn btn-ghost" id="sb-push">${icon('cloud', 15)} Enviar dados locais para a nuvem</button>
+          <button type="button" class="btn btn-ghost" id="sb-pull">${icon('cloud', 15)} Importar dados da nuvem</button>
+        </div>
+        <div id="sb-ping-result"></div>
+        <details class="sb-sql-details">
+          <summary>Ver script SQL para criar as tabelas no Supabase</summary>
+          <pre class="sb-sql-block">${escapeHtml(SUPABASE_SQL_SCRIPT)}</pre>
+        </details>
+        <div class="login-error" style="margin-top:14px;background:${COLORS.goldLight};color:#7a5c1a">
+          ${icon('alert', 15)} A chave "anon" é feita para ser pública, mas isso só é seguro se as políticas de RLS forem restritivas. Como ela fica embutida neste arquivo HTML, qualquer pessoa que abrir o arquivo terá o mesmo acesso às tabelas liberadas. Para dados reais de CPF e salário, considere restringir ainda mais com Supabase Auth.
+        </div>
+      </div>
+
+      <div class="panel danger-zone">
+        <h3>${icon('trash', 16)} Zona de risco</h3>
+        <p class="empty-hint" style="margin-bottom:14px">Zera os valores exibidos no Dashboard removendo todos os funcionários e lançamentos cadastrados — local e, se a sincronização estiver ativa, também na nuvem. Esta ação não pode ser desfeita.</p>
+        <button type="button" class="btn btn-danger" id="btn-clear-data">${icon('trash', 16)} Zerar todos os dados</button>
+      </div>
+    </div>
+  `;
+}
+
+function confirmClearDataHTML() {
+  return `
+    <div class="modal-header"><h3>Zerar todos os dados</h3><button class="icon-btn modal-close-btn">${icon('x', 18)}</button></div>
+    <div class="modal-body">
+      <p>Isso vai apagar <strong>todos os funcionários e lançamentos</strong> (${state.funcionarios.length} funcionário(s), ${state.lancamentos.length} lançamento(s)) e zerar os valores do Dashboard.${state.supabase.enabled ? ' As tabelas no Supabase também serão limpas.' : ''}</p>
+      <p style="margin-top:8px"><strong>Esta ação não pode ser desfeita.</strong></p>
+      <div class="form-actions" style="margin-top:20px">
+        <button class="btn btn-ghost modal-close-btn">Cancelar</button>
+        <button class="btn btn-danger" id="confirm-clear-data">${icon('trash', 16)} Sim, zerar tudo</button>
+      </div>
+    </div>
+  `;
+}
+
+function attachConfigListeners() {
+  $('#btn-clear-data').addEventListener('click', () => {
+    openModal(confirmClearDataHTML(), () => {
+      $('#confirm-clear-data').addEventListener('click', async () => {
+        const btn = $('#confirm-clear-data');
+        btn.disabled = true; btn.textContent = 'Zerando...';
+        state.funcionarios = [];
+        state.lancamentos = [];
+        await storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
+        await storageSet(STORAGE_KEYS.LANC, state.lancamentos);
+        if (state.supabase.enabled) {
+          try {
+            await fetch(supabaseBaseUrl(state.supabase) + '/rest/v1/funcionarios?id=not.is.null', { method: 'DELETE', headers: supabaseHeaders(state.supabase, { 'Prefer': 'return=minimal' }) });
+            await fetch(supabaseBaseUrl(state.supabase) + '/rest/v1/lancamentos?id=not.is.null', { method: 'DELETE', headers: supabaseHeaders(state.supabase, { 'Prefer': 'return=minimal' }) });
+          } catch (e) {
+            console.warn('Falha ao limpar dados na nuvem:', e.message);
+          }
+        }
+        closeModal();
+        renderView();
+      });
+    });
+  });
+  const keyInput = $('#sb-key');
+  const toggleKeyBtn = $('#sb-toggle-key');
+  let showKey = false;
+  toggleKeyBtn.addEventListener('click', () => {
+    showKey = !showKey;
+    keyInput.type = showKey ? 'text' : 'password';
+    toggleKeyBtn.innerHTML = showKey ? icon('eyeOff', 17) : icon('eye', 17);
+  });
+
+  function currentSupabaseFormConfig() {
+    return { url: $('#sb-url').value.trim(), anonKey: $('#sb-key').value.trim(), enabled: $('#sb-enabled').checked };
+  }
+  function showPingResult(result) {
+    state.ui.pingResult = result;
+    const el = $('#sb-ping-result');
+    if (!el) return;
+    el.innerHTML = `<div class="ping-result ${result.ok ? 'ping-ok' : 'ping-fail'}">
+      <span class="ping-dot"></span> ${escapeHtml(result.message)} ${result.ms ? `· ${result.ms}ms` : ''}
+    </div>`;
+  }
+
+  $('#sb-ping').addEventListener('click', async () => {
+    const cfg = currentSupabaseFormConfig();
+    $('#sb-ping-result').innerHTML = `<div class="ping-result ping-pending"><span class="ping-dot"></span> Testando conexão...</div>`;
+    const result = await supabasePing(cfg);
+    showPingResult(result);
+  });
+
+  $('#sb-push').addEventListener('click', async () => {
+    const cfg = currentSupabaseFormConfig();
+    const btn = $('#sb-push');
+    const original = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = 'Enviando...';
+    try {
+      if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow));
+      if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow));
+      await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: state.config, empresa: state.empresa }]);
+      showPingResult({ ok: true, ms: 0, message: 'Dados locais enviados com sucesso.' });
+    } catch (e) {
+      showPingResult({ ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message });
+    }
+    btn.disabled = false; btn.innerHTML = original;
+  });
+
+  $('#sb-pull').addEventListener('click', async () => {
+    const cfg = currentSupabaseFormConfig();
+    const btn = $('#sb-pull');
+    const original = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = 'Importando...';
+    try {
+      const prevCfg = state.supabase;
+      state.supabase = cfg;
+      await pullFromCloud();
+      storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
+      storageSet(STORAGE_KEYS.LANC, state.lancamentos);
+      storageSet(STORAGE_KEYS.CONFIG, state.config);
+      storageSet(STORAGE_KEYS.EMPRESA, state.empresa);
+      showPingResult({ ok: true, ms: 0, message: 'Dados importados da nuvem com sucesso.' });
+    } catch (e) {
+      showPingResult({ ok: false, ms: 0, message: 'Falha ao importar: ' + e.message });
+    }
+    btn.disabled = false; btn.innerHTML = original;
+  });
+
+  $('#btn-save-config').addEventListener('click', () => {
+    const inss = $all('[data-inss-ate]').map((input, idx) => ({
+      ate: Number(input.value),
+      aliquota: Number($(`[data-inss-aliq="${idx}"]`).value),
+    }));
+    const irrf = $all('[data-irrf-ate]').map((input, idx) => ({
+      ate: input.value === '' ? 99999999 : Number(input.value),
+      aliquota: Number($(`[data-irrf-aliq="${idx}"]`).value),
+      deducao: Number($(`[data-irrf-deducao="${idx}"]`).value),
+    }));
+    state.config = {
+      inss, irrf,
+      deducaoPorDependente: Number($('#cfg-dependente').value || 0),
+      fgtsRate: Number($('#cfg-fgts').value || 0),
+    };
+    state.empresa = {
+      nome: $('#cfg-nome').value.trim(),
+      marca: $('#cfg-marca').value.trim(),
+      cnpj: $('#cfg-cnpj').value.trim(),
+      endereco: $('#cfg-endereco').value.trim(),
+    };
+    state.supabase = currentSupabaseFormConfig();
+    storageSet(STORAGE_KEYS.CONFIG, state.config);
+    storageSet(STORAGE_KEYS.EMPRESA, state.empresa);
+    storageSet(STORAGE_KEYS.SUPABASE, state.supabase);
+    if (state.supabase.enabled) {
+      cloudSyncUpsert('app_settings', { id: 1, config: state.config, empresa: state.empresa });
+    }
+    const label = $('#save-config-label');
+    label.textContent = 'Salvo!';
+    setTimeout(() => { if (label) label.textContent = 'Salvar alterações'; }, 2000);
+    renderApp(); // sidebar/logo brand text may have changed
+  });
+}
+
+/* ---------------- START ---------------- */
+
+init();
+
+</script>
+</body>
+</html>
