@@ -55,14 +55,19 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
 .login-form { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12.5px; font-weight: 600; color: var(--muted-teal); margin: 10px 0 2px; text-transform: uppercase; letter-spacing: 0.04em; display: block; }
 .input-with-icon { position: relative; display: flex; align-items: center; color: var(--muted-teal); }
-.input-with-icon .icn { position: absolute; left: 12px; pointer-events: none; }
+.input-with-icon .icn { position: absolute; top: 50%; left: 12px; transform: translateY(-50%); pointer-events: none; }
 .input-with-icon input {
   width: 100%; padding: 11px 40px 11px 38px; border-radius: 10px;
   border: 1.5px solid var(--border); font-size: 14.5px; background: #fff; color: var(--ink);
   font-family: 'Inter', sans-serif;
 }
 .input-with-icon input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(19,80,92,0.12); }
-.icon-toggle { position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--muted-teal); padding: 6px; display: flex; border-radius: 6px; }
+.icon-toggle {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  background: none; border: none; margin: 0; cursor: pointer; color: var(--muted-teal);
+  padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 6px;
+  appearance: none; -webkit-appearance: none; line-height: 1;
+}
 .icon-toggle:hover { background: var(--cream); color: var(--teal); }
 .remember-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin: 14px 0 6px; cursor: pointer; }
 .remember-row input { accent-color: var(--teal); width: 15px; height: 15px; }
@@ -189,7 +194,7 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
 .empty-row { text-align: center; color: var(--muted-teal); padding: 30px !important; }
 .empty-hint { color: var(--muted-teal); font-size: 13.5px; }
 .row-actions { display: flex; gap: 6px; }
-.icon-btn { background: none; border: none; cursor: pointer; color: var(--muted-teal); padding: 6px; border-radius: 7px; display: flex; }
+.icon-btn { background: none; border: none; margin: 0; cursor: pointer; color: var(--muted-teal); padding: 6px; border-radius: 7px; display: flex; align-items: center; justify-content: center; appearance: none; -webkit-appearance: none; line-height: 1; }
 .icon-btn:hover { background: var(--cream); color: var(--teal); }
 .icon-btn-danger:hover { background: var(--brick-light); color: var(--brick); }
 
