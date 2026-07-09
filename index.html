@@ -323,7 +323,8 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
 /* ============================================================
    BOM DO SUL — SISTEMA DE FOLHA DE PAGAMENTO
    Vanilla JS, sem dependências de build. Dados persistidos via
-   window.storage (privados, por usuário).
+   window.storage quando disponível (artifacts do Claude.ai) ou via
+   localStorage do navegador como alternativa (uso standalone/hospedado).
    ============================================================ */
 
 /* ---------------- CONSTANTS ---------------- */
@@ -352,7 +353,7 @@ const STORAGE_KEYS = {
 const DEFAULT_SUPABASE = {
   url: 'https://tulldciuzormkvwlwuwt.supabase.co',
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1bGxkY2l1em9ybWt2d2x3dXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNzc1MDgsImV4cCI6MjA5ODg1MzUwOH0.KOVILLBrCsARjpYytpsuZkwTN0Adw7UuvzJKTEqptMY',
-  enabled: false,
+  enabled: true,
 };
 
 const SUPABASE_SQL_SCRIPT = `-- Tabela de funcionários
@@ -548,17 +549,29 @@ function computeFolha(funcionario, ano, mes, lancamentos, config) {
 
 /* ---------------- STORAGE ---------------- */
 
+const LOCAL_STORAGE_PREFIX = 'bomdosul:';
+const hasClaudeStorage = () => typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
+
 async function storageGet(key) {
   try {
-    const res = await window.storage.get(key, false);
-    return res ? JSON.parse(res.value) : null;
+    if (hasClaudeStorage()) {
+      const res = await window.storage.get(key, false);
+      return res ? JSON.parse(res.value) : null;
+    }
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
   } catch (e) {
+    console.error('storage get failed', key, e);
     return null;
   }
 }
 async function storageSet(key, value) {
   try {
-    await window.storage.set(key, JSON.stringify(value), false);
+    if (hasClaudeStorage()) {
+      await window.storage.set(key, JSON.stringify(value), false);
+      return true;
+    }
+    window.localStorage.setItem(LOCAL_STORAGE_PREFIX + key, JSON.stringify(value));
     return true;
   } catch (e) {
     console.error('storage set failed', key, e);
