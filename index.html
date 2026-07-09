@@ -766,8 +766,8 @@ function applySettingsConfigPayload(cfg) {
   if (!cfg) return;
   const { catalogoProventos, catalogoDescontos, ...restConfig } = cfg;
   if (Object.keys(restConfig).length) state.config = restConfig;
-  if (catalogoProventos) state.catalogoProventos = catalogoProventos;
-  if (catalogoDescontos) state.catalogoDescontos = catalogoDescontos;
+  if (catalogoProventos && catalogoProventos.length) state.catalogoProventos = catalogoProventos;
+  if (catalogoDescontos && catalogoDescontos.length) state.catalogoDescontos = catalogoDescontos;
 }
 
 async function pullFromCloud() {
@@ -777,8 +777,11 @@ async function pullFromCloud() {
     supabaseSelect(cfg, 'lancamentos'),
     supabaseSelect(cfg, 'app_settings', '?select=*&id=eq.1'),
   ]);
-  state.funcionarios = funcRows.map(rowToFunc);
-  state.lancamentos = lancRows.map(rowToLanc);
+  // Nunca sobrescrever dados locais com listas vazias vindas da nuvem —
+  // isso evita apagar cadastros locais quando as tabelas da nuvem ainda
+  // não foram populadas (ex.: antes do primeiro "Enviar para nuvem").
+  if (funcRows && funcRows.length) state.funcionarios = funcRows.map(rowToFunc);
+  if (lancRows && lancRows.length) state.lancamentos = lancRows.map(rowToLanc);
   if (settingsRows && settingsRows[0]) {
     applySettingsConfigPayload(settingsRows[0].config);
     if (settingsRows[0].empresa) state.empresa = settingsRows[0].empresa;
@@ -804,8 +807,8 @@ async function init() {
   if (cfg) state.config = cfg;
   if (emp) state.empresa = emp;
   if (sup) state.supabase = { ...DEFAULT_SUPABASE, ...sup };
-  if (catProv) state.catalogoProventos = catProv;
-  if (catDesc) state.catalogoDescontos = catDesc;
+  if (catProv && catProv.length) state.catalogoProventos = catProv;
+  if (catDesc && catDesc.length) state.catalogoDescontos = catDesc;
   if (state.supabase.enabled) {
     try {
       await pullFromCloud();
