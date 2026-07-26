@@ -129,6 +129,7 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
 .sidebar-sync-btn:disabled { opacity: 0.55; cursor: default; }
 .sync-status { display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-top: 8px; border-radius: 9px; font-size: 11.5px; font-weight: 600; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); border: 1px solid transparent; }
 .sync-detail { font-size: 10.5px; font-weight: 500; color: rgba(242,138,106,0.85); margin-top: 4px; padding: 0 4px; line-height: 1.4; word-break: break-word; }
+.sync-pending { font-size: 10.5px; font-weight: 600; color: var(--gold); margin-top: 4px; padding: 0 4px; line-height: 1.4; }
 .sync-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: currentColor; box-shadow: 0 0 0 3px rgba(255,255,255,0.10); }
 .sync-status.cloud-ok { color: #7fd18b; background: rgba(95,122,61,0.20); border-color: rgba(127,209,139,0.35); }
 .sync-status.cloud-warn { color: var(--gold); background: rgba(200,155,60,0.14); border-color: rgba(200,155,60,0.3); }
@@ -357,6 +358,7 @@ const STORAGE_KEYS = {
   SUPABASE: 'supabase-config',
   CAT_PROV: 'catalogo-proventos',
   CAT_DESC: 'catalogo-descontos',
+  SYNC_QUEUE: 'sync-retry-queue',
 };
 
 // Credenciais informadas pelo usuário — pré-preenchidas. A chave "publishable"
@@ -675,15 +677,106 @@ async function supabaseDeleteById(cfg, table, id) {
   if (!res.ok) throw new Error('Supabase delete ' + table + ' falhou: HTTP ' + res.status);
 }
 
-// Envia (fire-and-forget, com log de erro) uma linha para o Supabase quando a
-// sincronização em nuvem está ativa. Nunca bloqueia a interface local.
+// Envia (fire-and-forget) uma linha para o Supabase quando a sincronização
+// em nuvem está ativa. Nunca bloqueia a interface local. Se falhar (nuvem
+// fora do ar, por exemplo), o registro entra na fila de reenvio pendente
+// em vez de simplesmente se perder — o sistema tenta de novo sozinho depois.
 function cloudSyncUpsert(table, row, onConflict) {
   if (!state.supabase.enabled) return;
-  supabaseUpsert(state.supabase, table, [row], onConflict).catch((e) => console.warn('cloud sync (upsert) falhou:', e.message));
+  supabaseUpsert(state.supabase, table, [row], onConflict)
+    .then(() => dequeueSyncRetry(table, row.id))
+    .catch((e) => {
+      console.warn('cloud sync (upsert) falhou — entrou na fila de reenvio:', e.message);
+      queueSyncRetry(table, row.id, 'upsert');
+    });
 }
 function cloudSyncDelete(table, id) {
   if (!state.supabase.enabled) return;
-  supabaseDeleteById(state.supabase, table, id).catch((e) => console.warn('cloud sync (delete) falhou:', e.message));
+  supabaseDeleteById(state.supabase, table, id)
+    .then(() => dequeueSyncRetry(table, id))
+    .catch((e) => {
+      console.warn('cloud sync (delete) falhou — entrou na fila de reenvio:', e.message);
+      queueSyncRetry(table, id, 'delete');
+    });
+}
+
+/* ---------------- FILA DE REENVIO AUTOMÁTICO (nuvem) ---------------- */
+// Guarda, por "tabela:id", o que ainda precisa ser enviado à nuvem. Falhas
+// repetidas do mesmo registro só ocupam uma entrada (a mais recente vence).
+// Persiste no armazenamento local para sobreviver a fechar/reabrir o sistema.
+
+function syncQueueKey(table, id) {
+  return `${table}:${id}`;
+}
+function pendingSyncCount() {
+  return Object.keys(state.syncQueue).length;
+}
+function persistSyncQueue() {
+  storageSet(STORAGE_KEYS.SYNC_QUEUE, state.syncQueue);
+}
+function queueSyncRetry(table, id, op) {
+  state.syncQueue[syncQueueKey(table, id)] = { table, id, op, ts: Date.now() };
+  persistSyncQueue();
+  paintSidebarSync();
+}
+function dequeueSyncRetry(table, id) {
+  const key = syncQueueKey(table, id);
+  if (!(key in state.syncQueue)) return;
+  delete state.syncQueue[key];
+  persistSyncQueue();
+  paintSidebarSync();
+}
+function clearSyncQueue() {
+  state.syncQueue = {};
+  persistSyncQueue();
+  paintSidebarSync();
+}
+
+// Reconstrói o payload atual para um item pendente, a partir do estado local
+// de agora (não de uma foto antiga) — se o registro foi editado de novo
+// antes de conseguir sincronizar, o reenvio já sai com a versão mais nova.
+function resolveQueueItemRow(item) {
+  if (item.table === 'funcionarios') {
+    const f = state.funcionarios.find((x) => x.id === item.id);
+    return f ? funcToRow(f) : null;
+  }
+  if (item.table === 'lancamentos') {
+    const l = state.lancamentos.find((x) => x.id === item.id);
+    return l ? lancToRow(l) : null;
+  }
+  if (item.table === 'app_settings') {
+    return { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa };
+  }
+  return null;
+}
+
+// Tenta reenviar tudo que está pendente. Testa a conexão primeiro para não
+// disparar uma rajada de chamadas fadadas a falhar quando a nuvem está fora
+// do ar. Chamado automaticamente ao abrir o sistema, em segundo plano
+// periodicamente, e depois de qualquer envio manual bem-sucedido.
+async function flushSyncQueue() {
+  if (!state.supabase.enabled || pendingSyncCount() === 0) return;
+  const check = await supabasePing(state.supabase).catch((e) => ({ ok: false, ms: 0, message: e.message }));
+  // A confirmação de conectividade também atualiza o indicador principal —
+  // assim ele já vira verde na hora, sem esperar cada item terminar de enviar.
+  state.ui.pingResult = check;
+  paintSidebarSync();
+  if (!check.ok) return;
+  const items = Object.values(state.syncQueue);
+  for (const item of items) {
+    try {
+      if (item.op === 'delete') {
+        await supabaseDeleteById(state.supabase, item.table, item.id);
+      } else {
+        const row = resolveQueueItemRow(item);
+        if (!row) { dequeueSyncRetry(item.table, item.id); continue; } // registro não existe mais localmente
+        await supabaseUpsert(state.supabase, item.table, [row], 'id');
+      }
+      dequeueSyncRetry(item.table, item.id);
+    } catch (e) {
+      console.warn('reenvio pendente falhou de novo, tenta mais tarde:', item.table, item.id, e.message);
+    }
+  }
 }
 
 /* ---------------- ICONS (inline SVG, no external deps) ---------------- */
@@ -735,6 +828,10 @@ const state = {
   config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
   empresa: { ...DEFAULT_EMPRESA },
   supabase: { ...DEFAULT_SUPABASE },
+  // Fila de reenvio pendente: registros que falharam ao sincronizar com a
+  // nuvem ficam aqui até serem reenviados com sucesso — automaticamente,
+  // sem precisar que alguém clique em nada. Chave: "tabela:id".
+  syncQueue: {},
   catalogoProventos: DEFAULT_CATALOGO_PROVENTOS.map((c) => ({ ...c })),
   catalogoDescontos: DEFAULT_CATALOGO_DESCONTOS.map((c) => ({ ...c })),
   anoAtivo: new Date().getFullYear(),
@@ -832,7 +929,7 @@ async function pullFromCloud() {
 }
 
 async function init() {
-  const [cred, remembered, func, lanc, cfg, emp, sup, catProv, catDesc] = await Promise.all([
+  const [cred, remembered, func, lanc, cfg, emp, sup, catProv, catDesc, queue] = await Promise.all([
     storageGet(STORAGE_KEYS.CRED),
     storageGet(STORAGE_KEYS.REMEMBER),
     storageGet(STORAGE_KEYS.FUNC),
@@ -842,6 +939,7 @@ async function init() {
     storageGet(STORAGE_KEYS.SUPABASE),
     storageGet(STORAGE_KEYS.CAT_PROV),
     storageGet(STORAGE_KEYS.CAT_DESC),
+    storageGet(STORAGE_KEYS.SYNC_QUEUE),
   ]);
   if (cred) state.credentials = cred; else await storageSet(STORAGE_KEYS.CRED, DEFAULT_CREDENTIALS);
   if (remembered) state.rememberedLogin = remembered;
@@ -852,6 +950,7 @@ async function init() {
   if (sup) state.supabase = { ...DEFAULT_SUPABASE, ...sup };
   if (catProv && catProv.length) state.catalogoProventos = catProv;
   if (catDesc && catDesc.length) state.catalogoDescontos = catDesc;
+  if (queue) state.syncQueue = queue;
   if (state.supabase.enabled) {
     try {
       await pullFromCloud();
@@ -864,9 +963,22 @@ async function init() {
     } catch (e) {
       state.ui.pingResult = { ok: false, ms: 0, message: e.message };
     }
+    // Se a conexão está OK e ficou algo pendente de uma falha anterior,
+    // reenvia sozinho agora — sem precisar que alguém clique em nada.
+    if (state.ui.pingResult.ok && pendingSyncCount() > 0) {
+      await flushSyncQueue();
+    }
   }
   state.loading = false;
   renderApp();
+  // Tentativa periódica em segundo plano: enquanto o sistema estiver aberto,
+  // a cada 1 minuto verifica se sobrou algo pendente e tenta reenviar sozinho
+  // assim que a nuvem voltar a responder — sem depender de recarregar a página.
+  setInterval(async () => {
+    if (state.supabase.enabled && pendingSyncCount() > 0) {
+      await flushSyncQueue();
+    }
+  }, 60000);
 }
 
 /* ---------------- ROOT RENDER ---------------- */
@@ -1017,6 +1129,10 @@ function syncStatusInfo() {
   if (state.ui.pingResult.ok) return { cls: 'cloud-ok', label: 'Nuvem conectada' };
   return { cls: 'cloud-fail', label: 'Nuvem sem conexão' };
 }
+function sidebarSyncButtonLabel() {
+  const n = pendingSyncCount();
+  return `Enviar para nuvem${n > 0 ? ` (${n})` : ''}`;
+}
 
 function sidebarHTML() {
   const items = [
@@ -1028,6 +1144,7 @@ function sidebarHTML() {
     { id: 'config', label: 'Configurações', ic: 'settings' },
   ];
   const sync = syncStatusInfo();
+  const pending = pendingSyncCount();
   return `
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -1045,11 +1162,12 @@ function sidebarHTML() {
         `).join('')}
       </nav>
       ${state.supabase.enabled ? `
-      <button class="sidebar-sync-btn" id="btn-sidebar-sync">${icon('cloud', 14)}<span>Enviar para nuvem</span></button>
+      <button class="sidebar-sync-btn" id="btn-sidebar-sync">${icon('cloud', 14)}<span>${sidebarSyncButtonLabel()}</span></button>
       ` : ''}
       <div id="sidebar-sync-wrap">
         <div class="sync-status ${sync.cls}" id="sidebar-sync-status" title="${escapeHtml((state.ui.pingResult && state.ui.pingResult.message) ? state.ui.pingResult.message : sync.label)}"><span class="sync-dot"></span>${icon('cloud', 15)}<span>${sync.label}</span></div>
         ${sync.cls === 'cloud-fail' && state.ui.pingResult && state.ui.pingResult.message ? `<div class="sync-detail" id="sidebar-sync-detail">${escapeHtml(state.ui.pingResult.message)}</div>` : ''}
+        ${pending > 0 ? `<div class="sync-pending" id="sidebar-sync-pending">${pending} iten(s) aguardando envio — reenviando automaticamente</div>` : ''}
       </div>
       <button class="sidebar-logout" id="btn-logout">${icon('logout', 17)}<span>Sair</span></button>
     </aside>
@@ -1095,6 +1213,25 @@ function paintSidebarSync() {
   } else if (detail) {
     detail.remove();
   }
+  const pending = pendingSyncCount();
+  let pendingBox = $('#sidebar-sync-pending', wrap);
+  if (pending > 0) {
+    if (!pendingBox) {
+      pendingBox = document.createElement('div');
+      pendingBox.className = 'sync-pending';
+      pendingBox.id = 'sidebar-sync-pending';
+      wrap.appendChild(pendingBox);
+    }
+    pendingBox.textContent = `${pending} iten(s) aguardando envio — reenviando automaticamente`;
+  } else if (pendingBox) {
+    pendingBox.remove();
+  }
+  // Atualiza o texto do botão com a contagem, sem interromper um envio em
+  // andamento (que mostra "Enviando…" e fica desabilitado nesse momento).
+  const syncBtn = $('#btn-sidebar-sync');
+  if (syncBtn && !syncBtn.disabled) {
+    syncBtn.innerHTML = `${icon('cloud', 14)}<span>${sidebarSyncButtonLabel()}</span>`;
+  }
 }
 
 // Envia funcionários, lançamentos e configurações para a nuvem a partir do
@@ -1102,7 +1239,6 @@ function paintSidebarSync() {
 // já existe na nuvem é atualizado — nunca duplicado; só o que é realmente
 // novo entra como linha nova.
 async function sendLocalDataToCloud(btn) {
-  const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = `${icon('cloud', 14)}<span>Enviando…</span>`;
   const box = $('#sidebar-sync-status');
@@ -1117,11 +1253,12 @@ async function sendLocalDataToCloud(btn) {
     if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
     await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
     state.ui.pingResult = { ok: true, ms: 0, message: 'Dados enviados com sucesso (sem duplicar).' };
+    clearSyncQueue(); // envio completo cobriu tudo — não sobrou nada pendente
   } catch (e) {
     state.ui.pingResult = { ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message };
   }
   btn.disabled = false;
-  btn.innerHTML = original;
+  btn.innerHTML = `${icon('cloud', 14)}<span>${sidebarSyncButtonLabel()}</span>`;
   paintSidebarSync();
 }
 
@@ -2352,6 +2489,7 @@ function attachConfigListeners() {
       if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
       await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
       showPingResult({ ok: true, ms: 0, message: 'Dados locais enviados com sucesso (sem duplicar).' });
+      clearSyncQueue(); // envio completo cobriu tudo — não sobrou nada pendente
     } catch (e) {
       showPingResult({ ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message });
     }
