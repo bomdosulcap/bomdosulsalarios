@@ -118,23 +118,10 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
   cursor: pointer; font-size: 13.5px; font-family: 'Inter', sans-serif; margin-top: 12px;
 }
 .sidebar-logout:hover { background: rgba(245,238,220,0.08); color: #fff; }
-.sidebar-sync-btn {
-  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
-  padding: 9px 12px; border-radius: 9px; margin-top: 14px;
-  background: rgba(200,155,60,0.16); border: 1px solid rgba(200,155,60,0.38); color: var(--gold);
-  cursor: pointer; font-size: 12.5px; font-weight: 600; font-family: 'Inter', sans-serif;
-  transition: background 0.15s ease;
-}
-.sidebar-sync-btn:hover:not(:disabled) { background: rgba(200,155,60,0.28); }
-.sidebar-sync-btn:disabled { opacity: 0.55; cursor: default; }
-.sync-status { display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-top: 8px; border-radius: 9px; font-size: 11.5px; font-weight: 600; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); border: 1px solid transparent; }
-.sync-detail { font-size: 10.5px; font-weight: 500; color: rgba(242,138,106,0.85); margin-top: 4px; padding: 0 4px; line-height: 1.4; word-break: break-word; }
-.sync-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: currentColor; box-shadow: 0 0 0 3px rgba(255,255,255,0.10); }
-.sync-status.cloud-ok { color: #7fd18b; background: rgba(95,122,61,0.20); border-color: rgba(127,209,139,0.35); }
-.sync-status.cloud-warn { color: var(--gold); background: rgba(200,155,60,0.14); border-color: rgba(200,155,60,0.3); }
-.sync-status.cloud-fail, .sync-status.cloud-off { color: #f28a6a; background: rgba(168,70,31,0.24); border-color: rgba(242,138,106,0.42); }
-.sync-status.cloud-fail .sync-dot, .sync-status.cloud-off .sync-dot { animation: syncPulse 1.4s ease-in-out infinite; }
-@keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.sync-status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-top: 10px; border-radius: 9px; font-size: 11.5px; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); }
+.sync-status.cloud-ok { color: #a8d5ae; }
+.sync-status.cloud-warn { color: var(--gold); }
+.sync-status.cloud-off { color: rgba(245,238,220,0.45); }
 .sync-status span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------------- STATUS BADGES ---------------- */
@@ -359,16 +346,13 @@ const STORAGE_KEYS = {
   CAT_DESC: 'catalogo-descontos',
 };
 
-// Credenciais informadas pelo usuário — pré-preenchidas. A chave "publishable"
-// do Supabase é feita para ser pública em código de front-end, mas isso só é
+// Credenciais informadas pelo usuário — pré-preenchidas. A chave "anon" do
+// Supabase é feita para ser pública em código de front-end, mas isso só é
 // seguro se as políticas de RLS das tabelas forem restritivas. Ver aviso
 // de segurança nas Configurações > Integração Supabase.
-// NOTA: projetos Supabase criados após nov/2025 não aceitam mais a chave
-// legada "anon" (JWT longo começando com eyJ...) — use sempre a chave
-// "publishable" (sb_publishable_...).
 const DEFAULT_SUPABASE = {
   url: 'https://tulldciuzormkvwlwuwt.supabase.co',
-  anonKey: 'sb_publishable_Q7BctFY4y2CFN3Dg58mEgQ_5RdsbNpy',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1bGxkY2l1em9ybWt2d2x3dXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNzc1MDgsImV4cCI6MjA5ODg1MzUwOH0.KOVILLBrCsARjpYytpsuZkwTN0Adw7UuvzJKTEqptMY',
   enabled: true,
 };
 
@@ -603,53 +587,26 @@ function supabaseBaseUrl(cfg) {
   return u;
 }
 function supabaseHeaders(cfg, extra) {
-  const headers = {
+  return Object.assign({
     'apikey': cfg.anonKey,
+    'Authorization': 'Bearer ' + cfg.anonKey,
     'Content-Type': 'application/json',
-  };
-  // Chaves novas (sb_publishable_... / sb_secret_...) NÃO são JWTs e não podem
-  // ir no cabeçalho Authorization: Bearer — o gateway do Supabase tentaria
-  // validá-las como JWT e rejeitaria com 401. Elas vão só no cabeçalho apikey.
-  // Já as chaves legadas (JWT, começam com "eyJ") precisam dos dois cabeçalhos.
-  if (cfg.anonKey && !cfg.anonKey.startsWith('sb_')) {
-    headers['Authorization'] = 'Bearer ' + cfg.anonKey;
-  }
-  return Object.assign(headers, extra || {});
+  }, extra || {});
 }
 
 // Testa a conectividade com o projeto Supabase (não exige tabelas criadas).
 async function supabasePing(cfg) {
   const start = (window.performance || Date).now();
-  const baseUrl = supabaseBaseUrl(cfg);
   try {
     if (!cfg.url || !cfg.anonKey) return { ok: false, ms: 0, message: 'URL ou chave não configuradas.' };
-    // Não testamos a raiz "/rest/v1/" (esquema OpenAPI): desde jul/2026 o
-    // Supabase passou a exigir uma chave secreta só para esse endereço,
-    // mesmo quando a chave pública funciona normalmente para os dados.
-    // Testamos direto numa tabela real (aceitamos 404 = tabela ainda não
-    // criada, mas conexão/chave OK).
-    const res = await fetch(baseUrl + '/rest/v1/funcionarios?select=id&limit=1', { method: 'GET', headers: supabaseHeaders(cfg) });
+    const res = await fetch(supabaseBaseUrl(cfg) + '/rest/v1/', { method: 'GET', headers: supabaseHeaders(cfg) });
     const ms = Math.round((window.performance || Date).now() - start);
-    if (res.ok || res.status === 404) return { ok: true, ms, message: `Conectado (HTTP ${res.status}) — ${baseUrl}` };
-    // O Supabase/PostgREST manda uma mensagem de erro detalhada no corpo da
-    // resposta (ex.: "Invalid API key", "JWT expired", motivo real da
-    // rejeição) — lemos e mostramos isso em vez de só o código HTTP.
-    let detail = '';
-    try {
-      const bodyText = await res.text();
-      try {
-        const body = JSON.parse(bodyText);
-        detail = body && (body.message || body.msg || body.error_description || body.error || body.hint);
-      } catch (_) {
-        detail = bodyText;
-      }
-    } catch (_) { /* sem corpo legível, segue sem detalhe extra */ }
-    detail = detail ? ` — ${String(detail).slice(0, 180)}` : '';
-    if (res.status === 401 || res.status === 403) return { ok: false, ms, message: `Chave rejeitada (HTTP ${res.status})${detail} · URL: ${baseUrl}` };
-    return { ok: false, ms, message: `Resposta inesperada (HTTP ${res.status})${detail} · URL: ${baseUrl}` };
+    if (res.ok || res.status === 404) return { ok: true, ms, message: `Conectado (HTTP ${res.status})` };
+    if (res.status === 401 || res.status === 403) return { ok: false, ms, message: `Chave rejeitada (HTTP ${res.status})` };
+    return { ok: false, ms, message: `Resposta inesperada (HTTP ${res.status})` };
   } catch (e) {
     const ms = Math.round((window.performance || Date).now() - start);
-    return { ok: false, ms, message: `Falha de rede / CORS / URL inválida · URL: ${baseUrl}` };
+    return { ok: false, ms, message: 'Falha de rede / CORS / URL inválida' };
   }
 }
 
@@ -858,12 +815,6 @@ async function init() {
     } catch (e) {
       console.warn('Não foi possível carregar dados do Supabase — usando cache local.', e.message);
     }
-    // Testa a conexão logo na abertura para o indicador da nuvem mostrar verde/vermelho.
-    try {
-      state.ui.pingResult = await supabasePing(state.supabase);
-    } catch (e) {
-      state.ui.pingResult = { ok: false, ms: 0, message: e.message };
-    }
   }
   state.loading = false;
   renderApp();
@@ -1008,16 +959,6 @@ function attachLoginListeners() {
 
 /* ---------------- SIDEBAR ---------------- */
 
-// Estado atual do indicador de nuvem — usado tanto no primeiro desenho da
-// sidebar quanto para atualizar o indicador depois de um envio manual, sem
-// precisar redesenhar a tela inteira (o que perderia campos sendo digitados).
-function syncStatusInfo() {
-  if (!state.supabase.enabled) return { cls: 'cloud-off', label: 'Sem nuvem — somente local' };
-  if (!state.ui.pingResult) return { cls: 'cloud-warn', label: 'Verificando conexão…' };
-  if (state.ui.pingResult.ok) return { cls: 'cloud-ok', label: 'Nuvem conectada' };
-  return { cls: 'cloud-fail', label: 'Nuvem sem conexão' };
-}
-
 function sidebarHTML() {
   const items = [
     { id: 'dashboard', label: 'Dashboard', ic: 'grid' },
@@ -1027,7 +968,9 @@ function sidebarHTML() {
     { id: 'folha', label: 'Folha de Pagamento', ic: 'sheet' },
     { id: 'config', label: 'Configurações', ic: 'settings' },
   ];
-  const sync = syncStatusInfo();
+  const sync = state.supabase.enabled
+    ? (state.ui.pingResult && state.ui.pingResult.ok ? { cls: 'cloud-ok', label: 'Nuvem conectada' } : { cls: 'cloud-warn', label: 'Nuvem ativa (não verificada)' })
+    : { cls: 'cloud-off', label: 'Somente local' };
   return `
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -1044,13 +987,7 @@ function sidebarHTML() {
           </button>
         `).join('')}
       </nav>
-      ${state.supabase.enabled ? `
-      <button class="sidebar-sync-btn" id="btn-sidebar-sync">${icon('cloud', 14)}<span>Enviar para nuvem</span></button>
-      ` : ''}
-      <div id="sidebar-sync-wrap">
-        <div class="sync-status ${sync.cls}" id="sidebar-sync-status" title="${escapeHtml((state.ui.pingResult && state.ui.pingResult.message) ? state.ui.pingResult.message : sync.label)}"><span class="sync-dot"></span>${icon('cloud', 15)}<span>${sync.label}</span></div>
-        ${sync.cls === 'cloud-fail' && state.ui.pingResult && state.ui.pingResult.message ? `<div class="sync-detail" id="sidebar-sync-detail">${escapeHtml(state.ui.pingResult.message)}</div>` : ''}
-      </div>
+      <div class="sync-status ${sync.cls}" title="${sync.label}">${icon('cloud', 15)}<span>${sync.label}</span></div>
       <button class="sidebar-logout" id="btn-logout">${icon('logout', 17)}<span>Sair</span></button>
     </aside>
   `;
@@ -1067,62 +1004,6 @@ function attachSidebarListeners() {
     state.authed = false;
     renderApp();
   });
-  const syncBtn = $('#btn-sidebar-sync');
-  if (syncBtn) syncBtn.addEventListener('click', () => sendLocalDataToCloud(syncBtn));
-}
-
-// Atualiza só o botão e o indicador de nuvem na sidebar, sem redesenhar a
-// tela inteira — assim quem estiver com um formulário aberto em outra
-// tela não perde o que já digitou.
-function paintSidebarSync() {
-  const box = $('#sidebar-sync-status');
-  const wrap = $('#sidebar-sync-wrap');
-  if (!box || !wrap) return;
-  const sync = syncStatusInfo();
-  const message = state.ui.pingResult && state.ui.pingResult.message ? state.ui.pingResult.message : sync.label;
-  box.className = `sync-status ${sync.cls}`;
-  box.title = message;
-  box.innerHTML = `<span class="sync-dot"></span>${icon('cloud', 15)}<span>${sync.label}</span>`;
-  let detail = $('#sidebar-sync-detail', wrap);
-  if (sync.cls === 'cloud-fail' && state.ui.pingResult && state.ui.pingResult.message) {
-    if (!detail) {
-      detail = document.createElement('div');
-      detail.className = 'sync-detail';
-      detail.id = 'sidebar-sync-detail';
-      wrap.appendChild(detail);
-    }
-    detail.textContent = state.ui.pingResult.message;
-  } else if (detail) {
-    detail.remove();
-  }
-}
-
-// Envia funcionários, lançamentos e configurações para a nuvem a partir do
-// botão da sidebar. Usa on_conflict=id em cada envio, então um registro que
-// já existe na nuvem é atualizado — nunca duplicado; só o que é realmente
-// novo entra como linha nova.
-async function sendLocalDataToCloud(btn) {
-  const original = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `${icon('cloud', 14)}<span>Enviando…</span>`;
-  const box = $('#sidebar-sync-status');
-  if (box) {
-    box.className = 'sync-status cloud-warn';
-    box.title = 'Enviando dados para a nuvem…';
-    box.innerHTML = `<span class="sync-dot"></span>${icon('cloud', 15)}<span>Enviando…</span>`;
-  }
-  const cfg = state.supabase;
-  try {
-    if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow), 'id');
-    if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
-    await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
-    state.ui.pingResult = { ok: true, ms: 0, message: 'Dados enviados com sucesso (sem duplicar).' };
-  } catch (e) {
-    state.ui.pingResult = { ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message };
-  }
-  btn.disabled = false;
-  btn.innerHTML = original;
-  paintSidebarSync();
 }
 
 /* ---------------- DASHBOARD ---------------- */
@@ -1731,7 +1612,7 @@ function openFuncForm(existing) {
         state.funcionarios = [...state.funcionarios, saved];
       }
       storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
-      cloudSyncUpsert('funcionarios', funcToRow(saved), 'id');
+      cloudSyncUpsert('funcionarios', funcToRow(saved));
       closeModal();
       renderView();
     });
@@ -1748,7 +1629,7 @@ function persistCatalogos() {
   storageSet(STORAGE_KEYS.CAT_PROV, state.catalogoProventos);
   storageSet(STORAGE_KEYS.CAT_DESC, state.catalogoDescontos);
   if (state.supabase.enabled) {
-    cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+    cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa });
   }
 }
 
@@ -1985,7 +1866,7 @@ function attachLancamentosListeners() {
     };
     state.lancamentos = [...state.lancamentos, novoLanc];
     storageSet(STORAGE_KEYS.LANC, state.lancamentos);
-    cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
+    cloudSyncUpsert('lancamentos', lancToRow(novoLanc));
     renderView();
   });
   bindRemoveButtons();
@@ -2035,7 +1916,7 @@ function openLancForm() {
       };
       state.lancamentos = [...state.lancamentos, novoLanc];
       storageSet(STORAGE_KEYS.LANC, state.lancamentos);
-      cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
+      cloudSyncUpsert('lancamentos', lancToRow(novoLanc));
       closeModal();
       renderView();
     });
@@ -2215,9 +2096,9 @@ function configHTML() {
         <div class="form-grid">
           <div class="form-field span-2"><label>URL do projeto</label><input id="sb-url" value="${escapeHtml(state.supabase.url)}" placeholder="https://xxxx.supabase.co" /></div>
           <div class="form-field span-2">
-            <label>Chave publishable (public)</label>
+            <label>Chave anon (public)</label>
             <div class="input-with-icon">
-              <input id="sb-key" type="password" value="${escapeHtml(state.supabase.anonKey)}" placeholder="sb_publishable_..." />
+              <input id="sb-key" type="password" value="${escapeHtml(state.supabase.anonKey)}" placeholder="eyJhbGciOi..." />
               <button type="button" class="icon-toggle" id="sb-toggle-key" aria-label="Mostrar chave">${icon('eye', 17)}</button>
             </div>
           </div>
@@ -2346,12 +2227,10 @@ function attachConfigListeners() {
     const original = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = 'Enviando...';
     try {
-      // on_conflict=id garante que um registro já existente na nuvem seja
-      // atualizado, e nunca duplicado — só entra como novo o que ainda não existe lá.
-      if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow), 'id');
-      if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
-      await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
-      showPingResult({ ok: true, ms: 0, message: 'Dados locais enviados com sucesso (sem duplicar).' });
+      if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow));
+      if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow));
+      await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }]);
+      showPingResult({ ok: true, ms: 0, message: 'Dados locais enviados com sucesso.' });
     } catch (e) {
       showPingResult({ ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message });
     }
@@ -2404,19 +2283,12 @@ function attachConfigListeners() {
     storageSet(STORAGE_KEYS.EMPRESA, state.empresa);
     storageSet(STORAGE_KEYS.SUPABASE, state.supabase);
     if (state.supabase.enabled) {
-      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
-      state.ui.pingResult = null; // volta para "Verificando…" até o novo teste responder
-    } else {
-      state.ui.pingResult = null; // sem nuvem: indicador fica vermelho (somente local)
+      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa });
     }
     const label = $('#save-config-label');
     label.textContent = 'Salvo!';
     setTimeout(() => { if (label) label.textContent = 'Salvar alterações'; }, 2000);
     renderApp(); // sidebar/logo brand text may have changed
-    // Reconfere a conexão para o indicador da nuvem mostrar verde/vermelho atualizado.
-    if (state.supabase.enabled) {
-      supabasePing(state.supabase).then((r) => { state.ui.pingResult = r; renderApp(); }).catch(() => {});
-    }
   });
 }
 
