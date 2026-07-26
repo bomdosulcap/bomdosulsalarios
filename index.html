@@ -128,7 +128,7 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
 .sidebar-sync-btn:hover:not(:disabled) { background: rgba(200,155,60,0.28); }
 .sidebar-sync-btn:disabled { opacity: 0.55; cursor: default; }
 .sync-status { display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-top: 8px; border-radius: 9px; font-size: 11.5px; font-weight: 600; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); border: 1px solid transparent; }
-.sync-detail { font-size: 10.5px; font-weight: 500; color: rgba(242,138,106,0.85); margin-top: 4px; padding: 0 4px; line-height: 1.4; }
+.sync-detail { font-size: 10.5px; font-weight: 500; color: rgba(242,138,106,0.85); margin-top: 4px; padding: 0 4px; line-height: 1.4; word-break: break-word; }
 .sync-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: currentColor; box-shadow: 0 0 0 3px rgba(255,255,255,0.10); }
 .sync-status.cloud-ok { color: #7fd18b; background: rgba(95,122,61,0.20); border-color: rgba(127,209,139,0.35); }
 .sync-status.cloud-warn { color: var(--gold); background: rgba(200,155,60,0.14); border-color: rgba(200,155,60,0.3); }
@@ -610,16 +610,31 @@ function supabaseHeaders(cfg, extra) {
 // Testa a conectividade com o projeto Supabase (não exige tabelas criadas).
 async function supabasePing(cfg) {
   const start = (window.performance || Date).now();
+  const baseUrl = supabaseBaseUrl(cfg);
   try {
     if (!cfg.url || !cfg.anonKey) return { ok: false, ms: 0, message: 'URL ou chave não configuradas.' };
-    const res = await fetch(supabaseBaseUrl(cfg) + '/rest/v1/', { method: 'GET', headers: supabaseHeaders(cfg) });
+    const res = await fetch(baseUrl + '/rest/v1/', { method: 'GET', headers: supabaseHeaders(cfg) });
     const ms = Math.round((window.performance || Date).now() - start);
-    if (res.ok || res.status === 404) return { ok: true, ms, message: `Conectado (HTTP ${res.status})` };
-    if (res.status === 401 || res.status === 403) return { ok: false, ms, message: `Chave rejeitada (HTTP ${res.status})` };
-    return { ok: false, ms, message: `Resposta inesperada (HTTP ${res.status})` };
+    if (res.ok || res.status === 404) return { ok: true, ms, message: `Conectado (HTTP ${res.status}) — ${baseUrl}` };
+    // O Supabase/PostgREST manda uma mensagem de erro detalhada no corpo da
+    // resposta (ex.: "Invalid API key", "JWT expired", motivo real da
+    // rejeição) — lemos e mostramos isso em vez de só o código HTTP.
+    let detail = '';
+    try {
+      const bodyText = await res.text();
+      try {
+        const body = JSON.parse(bodyText);
+        detail = body && (body.message || body.msg || body.error_description || body.error || body.hint);
+      } catch (_) {
+        detail = bodyText;
+      }
+    } catch (_) { /* sem corpo legível, segue sem detalhe extra */ }
+    detail = detail ? ` — ${String(detail).slice(0, 180)}` : '';
+    if (res.status === 401 || res.status === 403) return { ok: false, ms, message: `Chave rejeitada (HTTP ${res.status})${detail} · URL: ${baseUrl}` };
+    return { ok: false, ms, message: `Resposta inesperada (HTTP ${res.status})${detail} · URL: ${baseUrl}` };
   } catch (e) {
     const ms = Math.round((window.performance || Date).now() - start);
-    return { ok: false, ms, message: 'Falha de rede / CORS / URL inválida' };
+    return { ok: false, ms, message: `Falha de rede / CORS / URL inválida · URL: ${baseUrl}` };
   }
 }
 
