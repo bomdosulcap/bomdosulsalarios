@@ -359,13 +359,16 @@ const STORAGE_KEYS = {
   CAT_DESC: 'catalogo-descontos',
 };
 
-// Credenciais informadas pelo usuário — pré-preenchidas. A chave "anon" do
-// Supabase é feita para ser pública em código de front-end, mas isso só é
+// Credenciais informadas pelo usuário — pré-preenchidas. A chave "publishable"
+// do Supabase é feita para ser pública em código de front-end, mas isso só é
 // seguro se as políticas de RLS das tabelas forem restritivas. Ver aviso
 // de segurança nas Configurações > Integração Supabase.
+// NOTA: projetos Supabase criados após nov/2025 não aceitam mais a chave
+// legada "anon" (JWT longo começando com eyJ...) — use sempre a chave
+// "publishable" (sb_publishable_...).
 const DEFAULT_SUPABASE = {
   url: 'https://tulldciuzormkvwlwuwt.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1bGxkY2l1em9ybWt2d2x3dXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNzc1MDgsImV4cCI6MjA5ODg1MzUwOH0.KOVILLBrCsARjpYytpsuZkwTN0Adw7UuvzJKTEqptMY',
+  anonKey: 'sb_publishable_Q7BctFY4y2CFN3Dg58mEgQ_5RdsbNpy',
   enabled: true,
 };
 
@@ -600,11 +603,18 @@ function supabaseBaseUrl(cfg) {
   return u;
 }
 function supabaseHeaders(cfg, extra) {
-  return Object.assign({
+  const headers = {
     'apikey': cfg.anonKey,
-    'Authorization': 'Bearer ' + cfg.anonKey,
     'Content-Type': 'application/json',
-  }, extra || {});
+  };
+  // Chaves novas (sb_publishable_... / sb_secret_...) NÃO são JWTs e não podem
+  // ir no cabeçalho Authorization: Bearer — o gateway do Supabase tentaria
+  // validá-las como JWT e rejeitaria com 401. Elas vão só no cabeçalho apikey.
+  // Já as chaves legadas (JWT, começam com "eyJ") precisam dos dois cabeçalhos.
+  if (cfg.anonKey && !cfg.anonKey.startsWith('sb_')) {
+    headers['Authorization'] = 'Bearer ' + cfg.anonKey;
+  }
+  return Object.assign(headers, extra || {});
 }
 
 // Testa a conectividade com o projeto Supabase (não exige tabelas criadas).
@@ -2200,9 +2210,9 @@ function configHTML() {
         <div class="form-grid">
           <div class="form-field span-2"><label>URL do projeto</label><input id="sb-url" value="${escapeHtml(state.supabase.url)}" placeholder="https://xxxx.supabase.co" /></div>
           <div class="form-field span-2">
-            <label>Chave anon (public)</label>
+            <label>Chave publishable (public)</label>
             <div class="input-with-icon">
-              <input id="sb-key" type="password" value="${escapeHtml(state.supabase.anonKey)}" placeholder="eyJhbGciOi..." />
+              <input id="sb-key" type="password" value="${escapeHtml(state.supabase.anonKey)}" placeholder="sb_publishable_..." />
               <button type="button" class="icon-toggle" id="sb-toggle-key" aria-label="Mostrar chave">${icon('eye', 17)}</button>
             </div>
           </div>
