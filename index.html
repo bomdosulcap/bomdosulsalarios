@@ -623,7 +623,12 @@ async function supabasePing(cfg) {
   const baseUrl = supabaseBaseUrl(cfg);
   try {
     if (!cfg.url || !cfg.anonKey) return { ok: false, ms: 0, message: 'URL ou chave não configuradas.' };
-    const res = await fetch(baseUrl + '/rest/v1/', { method: 'GET', headers: supabaseHeaders(cfg) });
+    // Não testamos a raiz "/rest/v1/" (esquema OpenAPI): desde jul/2026 o
+    // Supabase passou a exigir uma chave secreta só para esse endereço,
+    // mesmo quando a chave pública funciona normalmente para os dados.
+    // Testamos direto numa tabela real (aceitamos 404 = tabela ainda não
+    // criada, mas conexão/chave OK).
+    const res = await fetch(baseUrl + '/rest/v1/funcionarios?select=id&limit=1', { method: 'GET', headers: supabaseHeaders(cfg) });
     const ms = Math.round((window.performance || Date).now() - start);
     if (res.ok || res.status === 404) return { ok: true, ms, message: `Conectado (HTTP ${res.status}) — ${baseUrl}` };
     // O Supabase/PostgREST manda uma mensagem de erro detalhada no corpo da
