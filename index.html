@@ -118,10 +118,22 @@ h1, h3 { font-family: 'Fraunces', Georgia, serif; margin: 0; }
   cursor: pointer; font-size: 13.5px; font-family: 'Inter', sans-serif; margin-top: 12px;
 }
 .sidebar-logout:hover { background: rgba(245,238,220,0.08); color: #fff; }
-.sync-status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-top: 10px; border-radius: 9px; font-size: 11.5px; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); }
-.sync-status.cloud-ok { color: #a8d5ae; }
-.sync-status.cloud-warn { color: var(--gold); }
-.sync-status.cloud-off { color: rgba(245,238,220,0.45); }
+.sidebar-sync-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  padding: 9px 12px; border-radius: 9px; margin-top: 14px;
+  background: rgba(200,155,60,0.16); border: 1px solid rgba(200,155,60,0.38); color: var(--gold);
+  cursor: pointer; font-size: 12.5px; font-weight: 600; font-family: 'Inter', sans-serif;
+  transition: background 0.15s ease;
+}
+.sidebar-sync-btn:hover:not(:disabled) { background: rgba(200,155,60,0.28); }
+.sidebar-sync-btn:disabled { opacity: 0.55; cursor: default; }
+.sync-status { display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-top: 8px; border-radius: 9px; font-size: 11.5px; font-weight: 600; background: rgba(245,238,220,0.06); color: rgba(245,238,220,0.7); border: 1px solid transparent; }
+.sync-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: currentColor; box-shadow: 0 0 0 3px rgba(255,255,255,0.10); }
+.sync-status.cloud-ok { color: #7fd18b; background: rgba(95,122,61,0.20); border-color: rgba(127,209,139,0.35); }
+.sync-status.cloud-warn { color: var(--gold); background: rgba(200,155,60,0.14); border-color: rgba(200,155,60,0.3); }
+.sync-status.cloud-fail, .sync-status.cloud-off { color: #f28a6a; background: rgba(168,70,31,0.24); border-color: rgba(242,138,106,0.42); }
+.sync-status.cloud-fail .sync-dot, .sync-status.cloud-off .sync-dot { animation: syncPulse 1.4s ease-in-out infinite; }
+@keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 .sync-status span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------------- STATUS BADGES ---------------- */
@@ -815,6 +827,12 @@ async function init() {
     } catch (e) {
       console.warn('Não foi possível carregar dados do Supabase — usando cache local.', e.message);
     }
+    // Testa a conexão logo na abertura para o indicador da nuvem mostrar verde/vermelho.
+    try {
+      state.ui.pingResult = await supabasePing(state.supabase);
+    } catch (e) {
+      state.ui.pingResult = { ok: false, ms: 0, message: e.message };
+    }
   }
   state.loading = false;
   renderApp();
@@ -959,6 +977,16 @@ function attachLoginListeners() {
 
 /* ---------------- SIDEBAR ---------------- */
 
+// Estado atual do indicador de nuvem — usado tanto no primeiro desenho da
+// sidebar quanto para atualizar o indicador depois de um envio manual, sem
+// precisar redesenhar a tela inteira (o que perderia campos sendo digitados).
+function syncStatusInfo() {
+  if (!state.supabase.enabled) return { cls: 'cloud-off', label: 'Sem nuvem — somente local' };
+  if (!state.ui.pingResult) return { cls: 'cloud-warn', label: 'Verificando conexão…' };
+  if (state.ui.pingResult.ok) return { cls: 'cloud-ok', label: 'Nuvem conectada' };
+  return { cls: 'cloud-fail', label: 'Nuvem sem conexão' };
+}
+
 function sidebarHTML() {
   const items = [
     { id: 'dashboard', label: 'Dashboard', ic: 'grid' },
@@ -968,9 +996,7 @@ function sidebarHTML() {
     { id: 'folha', label: 'Folha de Pagamento', ic: 'sheet' },
     { id: 'config', label: 'Configurações', ic: 'settings' },
   ];
-  const sync = state.supabase.enabled
-    ? (state.ui.pingResult && state.ui.pingResult.ok ? { cls: 'cloud-ok', label: 'Nuvem conectada' } : { cls: 'cloud-warn', label: 'Nuvem ativa (não verificada)' })
-    : { cls: 'cloud-off', label: 'Somente local' };
+  const sync = syncStatusInfo();
   return `
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -987,7 +1013,10 @@ function sidebarHTML() {
           </button>
         `).join('')}
       </nav>
-      <div class="sync-status ${sync.cls}" title="${sync.label}">${icon('cloud', 15)}<span>${sync.label}</span></div>
+      ${state.supabase.enabled ? `
+      <button class="sidebar-sync-btn" id="btn-sidebar-sync">${icon('cloud', 14)}<span>Enviar para nuvem</span></button>
+      ` : ''}
+      <div class="sync-status ${sync.cls}" id="sidebar-sync-status" title="${sync.label}"><span class="sync-dot"></span>${icon('cloud', 15)}<span>${sync.label}</span></div>
       <button class="sidebar-logout" id="btn-logout">${icon('logout', 17)}<span>Sair</span></button>
     </aside>
   `;
@@ -1004,6 +1033,48 @@ function attachSidebarListeners() {
     state.authed = false;
     renderApp();
   });
+  const syncBtn = $('#btn-sidebar-sync');
+  if (syncBtn) syncBtn.addEventListener('click', () => sendLocalDataToCloud(syncBtn));
+}
+
+// Atualiza só o botão e o indicador de nuvem na sidebar, sem redesenhar a
+// tela inteira — assim quem estiver com um formulário aberto em outra
+// tela não perde o que já digitou.
+function paintSidebarSync() {
+  const box = $('#sidebar-sync-status');
+  if (!box) return;
+  const sync = syncStatusInfo();
+  box.className = `sync-status ${sync.cls}`;
+  box.title = state.ui.pingResult && state.ui.pingResult.message ? state.ui.pingResult.message : sync.label;
+  box.innerHTML = `<span class="sync-dot"></span>${icon('cloud', 15)}<span>${sync.label}</span>`;
+}
+
+// Envia funcionários, lançamentos e configurações para a nuvem a partir do
+// botão da sidebar. Usa on_conflict=id em cada envio, então um registro que
+// já existe na nuvem é atualizado — nunca duplicado; só o que é realmente
+// novo entra como linha nova.
+async function sendLocalDataToCloud(btn) {
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `${icon('cloud', 14)}<span>Enviando…</span>`;
+  const box = $('#sidebar-sync-status');
+  if (box) {
+    box.className = 'sync-status cloud-warn';
+    box.title = 'Enviando dados para a nuvem…';
+    box.innerHTML = `<span class="sync-dot"></span>${icon('cloud', 15)}<span>Enviando…</span>`;
+  }
+  const cfg = state.supabase;
+  try {
+    if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow), 'id');
+    if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
+    await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
+    state.ui.pingResult = { ok: true, ms: 0, message: 'Dados enviados com sucesso (sem duplicar).' };
+  } catch (e) {
+    state.ui.pingResult = { ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message };
+  }
+  btn.disabled = false;
+  btn.innerHTML = original;
+  paintSidebarSync();
 }
 
 /* ---------------- DASHBOARD ---------------- */
@@ -1612,7 +1683,7 @@ function openFuncForm(existing) {
         state.funcionarios = [...state.funcionarios, saved];
       }
       storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
-      cloudSyncUpsert('funcionarios', funcToRow(saved));
+      cloudSyncUpsert('funcionarios', funcToRow(saved), 'id');
       closeModal();
       renderView();
     });
@@ -1629,7 +1700,7 @@ function persistCatalogos() {
   storageSet(STORAGE_KEYS.CAT_PROV, state.catalogoProventos);
   storageSet(STORAGE_KEYS.CAT_DESC, state.catalogoDescontos);
   if (state.supabase.enabled) {
-    cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa });
+    cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
   }
 }
 
@@ -1866,7 +1937,7 @@ function attachLancamentosListeners() {
     };
     state.lancamentos = [...state.lancamentos, novoLanc];
     storageSet(STORAGE_KEYS.LANC, state.lancamentos);
-    cloudSyncUpsert('lancamentos', lancToRow(novoLanc));
+    cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
     renderView();
   });
   bindRemoveButtons();
@@ -1916,7 +1987,7 @@ function openLancForm() {
       };
       state.lancamentos = [...state.lancamentos, novoLanc];
       storageSet(STORAGE_KEYS.LANC, state.lancamentos);
-      cloudSyncUpsert('lancamentos', lancToRow(novoLanc));
+      cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
       closeModal();
       renderView();
     });
@@ -2227,10 +2298,12 @@ function attachConfigListeners() {
     const original = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = 'Enviando...';
     try {
-      if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow));
-      if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow));
-      await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }]);
-      showPingResult({ ok: true, ms: 0, message: 'Dados locais enviados com sucesso.' });
+      // on_conflict=id garante que um registro já existente na nuvem seja
+      // atualizado, e nunca duplicado — só entra como novo o que ainda não existe lá.
+      if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow), 'id');
+      if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
+      await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
+      showPingResult({ ok: true, ms: 0, message: 'Dados locais enviados com sucesso (sem duplicar).' });
     } catch (e) {
       showPingResult({ ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message });
     }
@@ -2283,12 +2356,19 @@ function attachConfigListeners() {
     storageSet(STORAGE_KEYS.EMPRESA, state.empresa);
     storageSet(STORAGE_KEYS.SUPABASE, state.supabase);
     if (state.supabase.enabled) {
-      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa });
+      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+      state.ui.pingResult = null; // volta para "Verificando…" até o novo teste responder
+    } else {
+      state.ui.pingResult = null; // sem nuvem: indicador fica vermelho (somente local)
     }
     const label = $('#save-config-label');
     label.textContent = 'Salvo!';
     setTimeout(() => { if (label) label.textContent = 'Salvar alterações'; }, 2000);
     renderApp(); // sidebar/logo brand text may have changed
+    // Reconfere a conexão para o indicador da nuvem mostrar verde/vermelho atualizado.
+    if (state.supabase.enabled) {
+      supabasePing(state.supabase).then((r) => { state.ui.pingResult = r; renderApp(); }).catch(() => {});
+    }
   });
 }
 
