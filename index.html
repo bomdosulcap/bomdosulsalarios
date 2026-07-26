@@ -910,6 +910,32 @@ function applySettingsConfigPayload(cfg) {
   if (catalogoDescontos && catalogoDescontos.length) state.catalogoDescontos = catalogoDescontos;
 }
 
+// Mescla o que veio da nuvem com o que ainda está pendente de envio local
+// (criado, editado ou apagado agora, mas que a nuvem ainda não confirmou
+// recebimento) — sem isso, um "puxar da nuvem" logo após lançar algo faria
+// esse lançamento sumir da tela antes de dar tempo de subir.
+function mergePulledWithPending(table, pulled, localList) {
+  const pendingUpsertIds = new Set();
+  const pendingDeleteIds = new Set();
+  for (const item of Object.values(state.syncQueue)) {
+    if (item.table !== table) continue;
+    if (item.op === 'delete') pendingDeleteIds.add(item.id);
+    else pendingUpsertIds.add(item.id);
+  }
+  if (!pendingUpsertIds.size && !pendingDeleteIds.size) return pulled;
+  const localById = new Map(localList.map((x) => [x.id, x]));
+  // Esconde o que já foi apagado localmente mas a nuvem ainda não processou.
+  let merged = pulled.filter((row) => !pendingDeleteIds.has(row.id));
+  // Para o que está pendente de criar/editar, prefere sempre a versão local
+  // (mais nova que a última confirmada na nuvem).
+  merged = merged.map((row) => (pendingUpsertIds.has(row.id) && localById.has(row.id) ? localById.get(row.id) : row));
+  const mergedIds = new Set(merged.map((x) => x.id));
+  for (const id of pendingUpsertIds) {
+    if (!mergedIds.has(id) && localById.has(id)) merged.push(localById.get(id));
+  }
+  return merged;
+}
+
 async function pullFromCloud() {
   const cfg = state.supabase;
   const [funcRows, lancRows, settingsRows] = await Promise.all([
@@ -920,8 +946,8 @@ async function pullFromCloud() {
   // Nunca sobrescrever dados locais com listas vazias vindas da nuvem —
   // isso evita apagar cadastros locais quando as tabelas da nuvem ainda
   // não foram populadas (ex.: antes do primeiro "Enviar para nuvem").
-  if (funcRows && funcRows.length) state.funcionarios = funcRows.map(rowToFunc);
-  if (lancRows && lancRows.length) state.lancamentos = lancRows.map(rowToLanc);
+  if (funcRows && funcRows.length) state.funcionarios = mergePulledWithPending('funcionarios', funcRows.map(rowToFunc), state.funcionarios);
+  if (lancRows && lancRows.length) state.lancamentos = mergePulledWithPending('lancamentos', lancRows.map(rowToLanc), state.lancamentos);
   if (settingsRows && settingsRows[0]) {
     applySettingsConfigPayload(settingsRows[0].config);
     if (settingsRows[0].empresa) state.empresa = settingsRows[0].empresa;
