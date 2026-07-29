@@ -597,6 +597,37 @@ async function storageSet(key, value) {
   }
 }
 
+// Aviso visível de erro/sucesso na tela — antes, uma falha ao gravar no
+// armazenamento local só ia pro console (ninguém via) e o dado parecia
+// salvo mesmo sem ter sido. Agora qualquer falha de gravação aparece aqui.
+function showToast(message, type) {
+  let el = document.getElementById('global-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'global-toast';
+    el.style.cssText = 'position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:9999;padding:12px 20px;border-radius:10px;font:600 14px Inter,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:min(90vw,480px);text-align:center;transition:opacity .25s ease;';
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.style.background = type === 'ok' ? '#5F7A3D' : '#A8461F';
+  el.style.color = '#FBF8F1';
+  el.style.opacity = '1';
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.style.opacity = '0'; }, 5000);
+}
+
+// Grava no armazenamento local e SÓ considera concluído se realmente deu
+// certo. Antes, "storageSet(...)" era chamado sem await em todo lugar: se a
+// gravação falhasse (ou nem desse tempo de terminar antes de fechar a aba),
+// o erro era engolido e o dado nunca era persistido de verdade, mesmo
+// aparecendo salvo na tela. Agora quem chama esta função sabe se falhou e
+// pode evitar fechar o formulário / avisar o usuário para tentar de novo.
+async function persist(key, value, label) {
+  const ok = await storageSet(key, value);
+  if (!ok) showToast(`Não foi possível salvar ${label || 'os dados'} — tente novamente.`, 'error');
+  return ok;
+}
+
 /* ---------------- SUPABASE (REST / PostgREST) ---------------- */
 
 function supabaseBaseUrl(cfg) {
@@ -1858,9 +1889,13 @@ function attachFuncionariosListeners() {
     $all('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
       const f = state.funcionarios.find((x) => x.id === btn.dataset.delete);
       openModal(confirmDeleteFuncHTML(f), () => {
-        $('#confirm-delete-func').addEventListener('click', () => {
-          state.funcionarios = state.funcionarios.filter((x) => x.id !== f.id);
-          storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
+        $('#confirm-delete-func').addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          const novaLista = state.funcionarios.filter((x) => x.id !== f.id);
+          const ok = await persist(STORAGE_KEYS.FUNC, novaLista, 'a exclusão do funcionário');
+          if (!ok) { btn.disabled = false; return; }
+          state.funcionarios = novaLista;
           cloudSyncDelete('funcionarios', f.id);
           closeModal();
           renderView();
@@ -1872,7 +1907,7 @@ function attachFuncionariosListeners() {
 
 function openFuncForm(existing) {
   openModal(funcionarioFormHTML(existing), () => {
-    $('#func-form').addEventListener('submit', (e) => {
+    $('#func-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const nome = $('#f-nome').value.trim();
       const salario = $('#f-salario').value;
@@ -1886,14 +1921,26 @@ function openFuncForm(existing) {
         salarioBase: Number(salario), dependentes: Number($('#f-dependentes').value || 0),
       };
       let saved;
+      let novaLista;
       if (existing) {
         saved = { ...existing, ...data };
-        state.funcionarios = state.funcionarios.map((f) => f.id === existing.id ? saved : f);
+        novaLista = state.funcionarios.map((f) => f.id === existing.id ? saved : f);
       } else {
         saved = { ...data, id: uid() };
-        state.funcionarios = [...state.funcionarios, saved];
+        novaLista = [...state.funcionarios, saved];
       }
-      storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
+      // Só atualiza o estado/fecha o modal depois de confirmar que a
+      // gravação local deu certo — antes, o modal fechava mesmo se a
+      // gravação falhasse, e o cadastro sumia na próxima abertura do sistema.
+      const submitBtn = $('#func-form button[type="submit"]');
+      const originalLabel = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'Salvando...'; }
+      const ok = await persist(STORAGE_KEYS.FUNC, novaLista, 'o funcionário');
+      if (!ok) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalLabel; }
+        return; // mantém o modal aberto com os dados preenchidos, para tentar de novo
+      }
+      state.funcionarios = novaLista;
       cloudSyncUpsert('funcionarios', funcToRow(saved), 'id');
       closeModal();
       renderView();
@@ -1907,12 +1954,22 @@ function catalogoAtivo() {
   return state.ui.catalogoTab === 'descontos' ? state.catalogoDescontos : state.catalogoProventos;
 }
 
-function persistCatalogos() {
-  storageSet(STORAGE_KEYS.CAT_PROV, state.catalogoProventos);
-  storageSet(STORAGE_KEYS.CAT_DESC, state.catalogoDescontos);
-  if (state.supabase.enabled) {
-    cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+// Recebe as listas já atualizadas (não mexe no state antes de confirmar a
+// gravação) — assim, se a gravação falhar, o cadastro exibido na tela
+// continua sendo o que está realmente salvo, sem enganar o usuário.
+async function persistCatalogos(novoProv, novoDesc) {
+  const prov = novoProv || state.catalogoProventos;
+  const desc = novoDesc || state.catalogoDescontos;
+  const okProv = await persist(STORAGE_KEYS.CAT_PROV, prov, 'os proventos');
+  const okDesc = await persist(STORAGE_KEYS.CAT_DESC, desc, 'os descontos');
+  if (okProv && okDesc) {
+    state.catalogoProventos = prov;
+    state.catalogoDescontos = desc;
+    if (state.supabase.enabled) {
+      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+    }
   }
+  return okProv && okDesc;
 }
 
 function catalogosHTML() {
@@ -2004,11 +2061,14 @@ function attachCatalogosListeners() {
     $all('[data-cat-delete]').forEach((btn) => btn.addEventListener('click', () => {
       const item = catalogoAtivo().find((x) => x.id === btn.dataset.catDelete);
       openModal(confirmDeleteCatalogoHTML(item), () => {
-        $('#confirm-delete-catalogo').addEventListener('click', () => {
+        $('#confirm-delete-catalogo').addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
           const tab = state.ui.catalogoTab;
-          if (tab === 'descontos') state.catalogoDescontos = state.catalogoDescontos.filter((x) => x.id !== item.id);
-          else state.catalogoProventos = state.catalogoProventos.filter((x) => x.id !== item.id);
-          persistCatalogos();
+          const novoDesc = tab === 'descontos' ? state.catalogoDescontos.filter((x) => x.id !== item.id) : state.catalogoDescontos;
+          const novoProv = tab === 'descontos' ? state.catalogoProventos : state.catalogoProventos.filter((x) => x.id !== item.id);
+          const ok = await persistCatalogos(novoProv, novoDesc);
+          if (!ok) { btn.disabled = false; return; }
           closeModal();
           renderView();
         });
@@ -2020,19 +2080,26 @@ function attachCatalogosListeners() {
 function openCatalogoForm(existing) {
   const tab = state.ui.catalogoTab;
   openModal(catalogoFormHTML(existing, tab), () => {
-    $('#catalogo-form').addEventListener('submit', (e) => {
+    $('#catalogo-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const descricao = $('#cat-descricao').value.trim();
       if (!descricao) return;
       const data = { codigo: $('#cat-codigo').value.trim() || '—', descricao };
+      let novoProv = state.catalogoProventos;
+      let novoDesc = state.catalogoDescontos;
       if (tab === 'descontos') {
-        if (existing) state.catalogoDescontos = state.catalogoDescontos.map((c) => c.id === existing.id ? { ...existing, ...data } : c);
-        else state.catalogoDescontos = [...state.catalogoDescontos, { ...data, id: uid() }];
+        novoDesc = existing ? state.catalogoDescontos.map((c) => c.id === existing.id ? { ...existing, ...data } : c) : [...state.catalogoDescontos, { ...data, id: uid() }];
       } else {
-        if (existing) state.catalogoProventos = state.catalogoProventos.map((c) => c.id === existing.id ? { ...existing, ...data } : c);
-        else state.catalogoProventos = [...state.catalogoProventos, { ...data, id: uid() }];
+        novoProv = existing ? state.catalogoProventos.map((c) => c.id === existing.id ? { ...existing, ...data } : c) : [...state.catalogoProventos, { ...data, id: uid() }];
       }
-      persistCatalogos();
+      const submitBtn = $('#catalogo-form button[type="submit"]');
+      const originalLabel = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'Salvando...'; }
+      const ok = await persistCatalogos(novoProv, novoDesc);
+      if (!ok) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalLabel; }
+        return;
+      }
       closeModal();
       renderView();
     });
@@ -2139,15 +2206,19 @@ function attachLancamentosListeners() {
   const newBtn = $('#btn-new-lanc');
   if (newBtn) newBtn.addEventListener('click', openLancForm);
   const quickBtn = $('#btn-lanc-salario-base');
-  if (quickBtn) quickBtn.addEventListener('click', () => {
+  if (quickBtn) quickBtn.addEventListener('click', async () => {
     const funcionario = state.funcionarios.find((f) => f.id === state.ui.lancFuncionarioId);
     if (!funcionario) return;
+    quickBtn.disabled = true;
     const novoLanc = {
       id: uid(), funcionarioId: funcionario.id, ano: state.ui.lancAno, mes: state.ui.lancMes,
       tipo: 'provento', codigo: '005', descricao: 'Salário mensalista', referencia: '30,00', valor: funcionario.salarioBase || 0,
     };
-    state.lancamentos = [...state.lancamentos, novoLanc];
-    storageSet(STORAGE_KEYS.LANC, state.lancamentos);
+    const novaLista = [...state.lancamentos, novoLanc];
+    const ok = await persist(STORAGE_KEYS.LANC, novaLista, 'o lançamento');
+    quickBtn.disabled = false;
+    if (!ok) return;
+    state.lancamentos = novaLista;
     cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
     renderView();
   });
@@ -2158,10 +2229,14 @@ function attachLancamentosListeners() {
     bindRemoveButtons();
   }
   function bindRemoveButtons() {
-    $all('[data-remove-lanc]').forEach((btn) => btn.addEventListener('click', () => {
-      state.lancamentos = state.lancamentos.filter((l) => l.id !== btn.dataset.removeLanc);
-      storageSet(STORAGE_KEYS.LANC, state.lancamentos);
-      cloudSyncDelete('lancamentos', btn.dataset.removeLanc);
+    $all('[data-remove-lanc]').forEach((btn) => btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const id = btn.dataset.removeLanc;
+      const novaLista = state.lancamentos.filter((l) => l.id !== id);
+      const ok = await persist(STORAGE_KEYS.LANC, novaLista, 'a exclusão do lançamento');
+      if (!ok) { btn.disabled = false; return; }
+      state.lancamentos = novaLista;
+      cloudSyncDelete('lancamentos', id);
       renderView();
     }));
   }
@@ -2187,7 +2262,7 @@ function openLancForm() {
         $all('.chip').forEach((c) => c.classList.toggle('chip-active', c === chip));
       }));
     }
-    $('#lanc-form').addEventListener('submit', (e) => {
+    $('#lanc-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const descricao = $('#l-descricao').value.trim();
       const valor = $('#l-valor').value;
@@ -2196,8 +2271,16 @@ function openLancForm() {
         id: uid(), funcionarioId: state.ui.lancFuncionarioId, ano: state.ui.lancAno, mes: state.ui.lancMes,
         tipo, codigo: $('#l-codigo').value.trim() || '—', descricao, referencia: $('#l-referencia').value.trim(), valor: Number(valor),
       };
-      state.lancamentos = [...state.lancamentos, novoLanc];
-      storageSet(STORAGE_KEYS.LANC, state.lancamentos);
+      const novaLista = [...state.lancamentos, novoLanc];
+      const submitBtn = $('#lanc-submit-btn');
+      const originalLabel = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'Salvando...'; }
+      const ok = await persist(STORAGE_KEYS.LANC, novaLista, 'o lançamento');
+      if (!ok) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalLabel; }
+        return;
+      }
+      state.lancamentos = novaLista;
       cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
       closeModal();
       renderView();
@@ -2446,9 +2529,14 @@ function attachConfigListeners() {
       msgEl.innerHTML = `<div class="login-error">${icon('alert', 15)} A confirmação não corresponde à nova senha.</div>`;
       return;
     }
-    state.credentials = { username: current.username, password: nova };
-    await storageSet(STORAGE_KEYS.CRED, state.credentials);
-    await storageSet(STORAGE_KEYS.REMEMBER, null);
+    const novasCredenciais = { username: current.username, password: nova };
+    const ok = await persist(STORAGE_KEYS.CRED, novasCredenciais, 'a nova senha');
+    if (!ok) {
+      msgEl.innerHTML = `<div class="login-error">${icon('alert', 15)} Não foi possível salvar a nova senha. Tente novamente.</div>`;
+      return;
+    }
+    state.credentials = novasCredenciais;
+    await persist(STORAGE_KEYS.REMEMBER, null, 'a preferência de login lembrado');
     state.rememberedLogin = null;
     msgEl.innerHTML = `<div class="ping-result ping-ok"><span class="ping-dot"></span> Senha atualizada com sucesso.</div>`;
     $('#pwd-atual').value = ''; $('#pwd-nova').value = ''; $('#pwd-confirma').value = '';
@@ -2458,10 +2546,14 @@ function attachConfigListeners() {
       $('#confirm-clear-data').addEventListener('click', async () => {
         const btn = $('#confirm-clear-data');
         btn.disabled = true; btn.textContent = 'Zerando...';
+        const okFunc = await persist(STORAGE_KEYS.FUNC, [], 'a limpeza de funcionários');
+        const okLanc = await persist(STORAGE_KEYS.LANC, [], 'a limpeza de lançamentos');
+        if (!okFunc || !okLanc) {
+          btn.disabled = false; btn.textContent = 'Sim, zerar tudo';
+          return; // não confirma localmente como zerado se a gravação falhou
+        }
         state.funcionarios = [];
         state.lancamentos = [];
-        await storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
-        await storageSet(STORAGE_KEYS.LANC, state.lancamentos);
         if (state.supabase.enabled) {
           try {
             await fetch(supabaseBaseUrl(state.supabase) + '/rest/v1/funcionarios?id=not.is.null', { method: 'DELETE', headers: supabaseHeaders(state.supabase, { 'Prefer': 'return=minimal' }) });
@@ -2526,23 +2618,34 @@ function attachConfigListeners() {
     const cfg = currentSupabaseFormConfig();
     const btn = $('#sb-pull');
     const original = btn.innerHTML;
+    // Importar substitui o que está na tela pelo que está na nuvem. Se
+    // existir algo cadastrado localmente que nunca foi enviado (ex.: nuvem
+    // foi ligada depois de já ter uso local, ou um envio anterior falhou),
+    // essa troca pode fazer esse cadastro "sumir" — por isso avisamos antes.
+    const temDadosLocais = state.funcionarios.length > 0 || state.lancamentos.length > 0;
+    if (temDadosLocais && !window.confirm('Importar da nuvem substitui os funcionários e lançamentos mostrados aqui pelos que estão salvos na nuvem. Se algum cadastro local ainda não foi enviado (botão "Enviar dados locais para a nuvem"), ele pode ser perdido. Deseja continuar mesmo assim?')) {
+      return;
+    }
     btn.disabled = true; btn.innerHTML = 'Importando...';
     try {
-      const prevCfg = state.supabase;
       state.supabase = cfg;
       await pullFromCloud();
-      storageSet(STORAGE_KEYS.FUNC, state.funcionarios);
-      storageSet(STORAGE_KEYS.LANC, state.lancamentos);
-      storageSet(STORAGE_KEYS.CONFIG, state.config);
-      storageSet(STORAGE_KEYS.EMPRESA, state.empresa);
-      showPingResult({ ok: true, ms: 0, message: 'Dados importados da nuvem com sucesso.' });
+      const okFunc = await persist(STORAGE_KEYS.FUNC, state.funcionarios, 'os funcionários importados');
+      const okLanc = await persist(STORAGE_KEYS.LANC, state.lancamentos, 'os lançamentos importados');
+      await persist(STORAGE_KEYS.CONFIG, state.config, 'as configurações importadas');
+      await persist(STORAGE_KEYS.EMPRESA, state.empresa, 'os dados da empresa importados');
+      if (okFunc && okLanc) {
+        showPingResult({ ok: true, ms: 0, message: 'Dados importados da nuvem com sucesso.' });
+      } else {
+        showPingResult({ ok: false, ms: 0, message: 'Dados importados da nuvem, mas houve falha ao salvar localmente — tente importar de novo.' });
+      }
     } catch (e) {
       showPingResult({ ok: false, ms: 0, message: 'Falha ao importar: ' + e.message });
     }
     btn.disabled = false; btn.innerHTML = original;
   });
 
-  $('#btn-save-config').addEventListener('click', () => {
+  $('#btn-save-config').addEventListener('click', async () => {
     const inss = $all('[data-inss-ate]').map((input, idx) => ({
       ate: Number(input.value),
       aliquota: Number($(`[data-inss-aliq="${idx}"]`).value),
@@ -2552,28 +2655,47 @@ function attachConfigListeners() {
       aliquota: Number($(`[data-irrf-aliq="${idx}"]`).value),
       deducao: Number($(`[data-irrf-deducao="${idx}"]`).value),
     }));
-    state.config = {
+    const novoConfig = {
       inss, irrf,
       deducaoPorDependente: Number($('#cfg-dependente').value || 0),
       fgtsRate: Number($('#cfg-fgts').value || 0),
     };
-    state.empresa = {
+    const novaEmpresa = {
       nome: $('#cfg-nome').value.trim(),
       marca: $('#cfg-marca').value.trim(),
       cnpj: $('#cfg-cnpj').value.trim(),
       endereco: $('#cfg-endereco').value.trim(),
     };
-    state.supabase = currentSupabaseFormConfig();
-    storageSet(STORAGE_KEYS.CONFIG, state.config);
-    storageSet(STORAGE_KEYS.EMPRESA, state.empresa);
-    storageSet(STORAGE_KEYS.SUPABASE, state.supabase);
+    const novoSupabase = currentSupabaseFormConfig();
+    // Detecta o momento exato de ligar a sincronização (estava desligada,
+    // agora está ligada) para, logo abaixo, mandar os cadastros locais
+    // existentes para a nuvem antes que um futuro "Importar" possa
+    // sobrescrevê-los sem eles nunca terem sido enviados.
+    const habilitandoAgora = novoSupabase.enabled && !state.supabase.enabled;
+    const btnSave = $('#btn-save-config');
+    const label = $('#save-config-label');
+    btnSave.disabled = true;
+    const okCfg = await persist(STORAGE_KEYS.CONFIG, novoConfig, 'as configurações');
+    const okEmp = await persist(STORAGE_KEYS.EMPRESA, novaEmpresa, 'os dados da empresa');
+    const okSup = await persist(STORAGE_KEYS.SUPABASE, novoSupabase, 'a configuração de nuvem');
+    btnSave.disabled = false;
+    if (!okCfg || !okEmp || !okSup) return; // já avisou via toast; mantém a tela como estava para tentar de novo
+    state.config = novoConfig;
+    state.empresa = novaEmpresa;
+    state.supabase = novoSupabase;
     if (state.supabase.enabled) {
       cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+      if (habilitandoAgora && (state.funcionarios.length || state.lancamentos.length)) {
+        Promise.all([
+          state.funcionarios.length ? supabaseUpsert(state.supabase, 'funcionarios', state.funcionarios.map(funcToRow), 'id') : Promise.resolve(),
+          state.lancamentos.length ? supabaseUpsert(state.supabase, 'lancamentos', state.lancamentos.map(lancToRow), 'id') : Promise.resolve(),
+        ]).then(() => showToast('Cadastros locais existentes foram enviados para a nuvem.', 'ok'))
+          .catch((e) => showToast('Não foi possível enviar os cadastros locais já existentes para a nuvem: ' + e.message, 'error'));
+      }
       state.ui.pingResult = null; // volta para "Verificando…" até o novo teste responder
     } else {
       state.ui.pingResult = null; // sem nuvem: indicador fica vermelho (somente local)
     }
-    const label = $('#save-config-label');
     label.textContent = 'Salvo!';
     setTimeout(() => { if (label) label.textContent = 'Salvar alterações'; }, 2000);
     renderApp(); // sidebar/logo brand text may have changed
