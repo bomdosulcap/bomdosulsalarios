@@ -371,7 +371,11 @@ const STORAGE_KEYS = {
 const DEFAULT_SUPABASE = {
   url: 'https://tulldciuzormkvwlwuwt.supabase.co',
   anonKey: 'sb_publishable_Q7BctFY4y2CFN3Dg58mEgQ_5RdsbNpy',
-  enabled: true,
+  // Desligado por padrão: o armazenamento local é a fonte confiável dos
+  // dados. Ver init() — antes, com isso ligado por padrão, toda abertura do
+  // sistema disparava um "puxar da nuvem" automático que podia sobrescrever
+  // lançamentos recém-criados localmente ainda não confirmados na nuvem.
+  enabled: false,
 };
 
 const SUPABASE_SQL_SCRIPT = `-- Tabela de funcionários
@@ -1009,19 +1013,25 @@ async function init() {
   if (catDesc && catDesc.length) state.catalogoDescontos = catDesc;
   if (queue) state.syncQueue = queue;
   if (state.supabase.enabled) {
-    try {
-      await pullFromCloud();
-    } catch (e) {
-      console.warn('Não foi possível carregar dados do Supabase — usando cache local.', e.message);
-    }
-    // Testa a conexão logo na abertura para o indicador da nuvem mostrar verde/vermelho.
+    // IMPORTANTE: não chamamos mais pullFromCloud() automaticamente aqui.
+    // Antes, toda vez que o sistema era aberto (inclusive só fechando e
+    // reabrindo a aba, ou saindo e entrando de novo), ele buscava os dados
+    // da nuvem e SUBSTITUÍA funcionários/lançamentos locais — se um
+    // lançamento tivesse acabado de ser criado e o envio dele para a nuvem
+    // ainda não tivesse terminado (ou tivesse falhado sem dar tempo de
+    // entrar na fila de reenvio), essa busca automática apagava o
+    // lançamento da tela, mesmo ele estando salvo corretamente localmente.
+    // Agora a nuvem só é lida quando o usuário pede explicitamente, no
+    // botão "Importar dados da nuvem" em Configurações — o armazenamento
+    // local é sempre a fonte de verdade do que aparece no sistema.
     try {
       state.ui.pingResult = await supabasePing(state.supabase);
     } catch (e) {
       state.ui.pingResult = { ok: false, ms: 0, message: e.message };
     }
-    // Se a conexão está OK e ficou algo pendente de uma falha anterior,
-    // reenvia sozinho agora — sem precisar que alguém clique em nada.
+    // Se a conexão está OK e ficou algo pendente de uma falha anterior de
+    // ENVIO (nunca de importação), reenvia sozinho agora — isso só escreve
+    // na nuvem, nunca sobrescreve o que está local.
     if (state.ui.pingResult.ok && pendingSyncCount() > 0) {
       await flushSyncQueue();
     }
@@ -1186,10 +1196,6 @@ function syncStatusInfo() {
   if (state.ui.pingResult.ok) return { cls: 'cloud-ok', label: 'Nuvem conectada' };
   return { cls: 'cloud-fail', label: 'Nuvem sem conexão' };
 }
-function sidebarSyncButtonLabel() {
-  const n = pendingSyncCount();
-  return `Enviar para nuvem${n > 0 ? ` (${n})` : ''}`;
-}
 
 function sidebarHTML() {
   const items = [
@@ -1218,9 +1224,6 @@ function sidebarHTML() {
           </button>
         `).join('')}
       </nav>
-      ${state.supabase.enabled ? `
-      <button class="sidebar-sync-btn" id="btn-sidebar-sync">${icon('cloud', 14)}<span>${sidebarSyncButtonLabel()}</span></button>
-      ` : ''}
       <div id="sidebar-sync-wrap">
         <div class="sync-status ${sync.cls}" id="sidebar-sync-status" title="${escapeHtml((state.ui.pingResult && state.ui.pingResult.message) ? state.ui.pingResult.message : sync.label)}"><span class="sync-dot"></span>${icon('cloud', 15)}<span>${sync.label}</span></div>
         ${sync.cls === 'cloud-fail' && state.ui.pingResult && state.ui.pingResult.message ? `<div class="sync-detail" id="sidebar-sync-detail">${escapeHtml(state.ui.pingResult.message)}</div>` : ''}
@@ -1242,13 +1245,11 @@ function attachSidebarListeners() {
     state.authed = false;
     renderApp();
   });
-  const syncBtn = $('#btn-sidebar-sync');
-  if (syncBtn) syncBtn.addEventListener('click', () => sendLocalDataToCloud(syncBtn));
 }
 
-// Atualiza só o botão e o indicador de nuvem na sidebar, sem redesenhar a
-// tela inteira — assim quem estiver com um formulário aberto em outra
-// tela não perde o que já digitou.
+// Atualiza só o indicador de nuvem na sidebar, sem redesenhar a tela
+// inteira — assim quem estiver com um formulário aberto em outra tela não
+// perde o que já digitou.
 function paintSidebarSync() {
   const box = $('#sidebar-sync-status');
   const wrap = $('#sidebar-sync-wrap');
@@ -1283,40 +1284,6 @@ function paintSidebarSync() {
   } else if (pendingBox) {
     pendingBox.remove();
   }
-  // Atualiza o texto do botão com a contagem, sem interromper um envio em
-  // andamento (que mostra "Enviando…" e fica desabilitado nesse momento).
-  const syncBtn = $('#btn-sidebar-sync');
-  if (syncBtn && !syncBtn.disabled) {
-    syncBtn.innerHTML = `${icon('cloud', 14)}<span>${sidebarSyncButtonLabel()}</span>`;
-  }
-}
-
-// Envia funcionários, lançamentos e configurações para a nuvem a partir do
-// botão da sidebar. Usa on_conflict=id em cada envio, então um registro que
-// já existe na nuvem é atualizado — nunca duplicado; só o que é realmente
-// novo entra como linha nova.
-async function sendLocalDataToCloud(btn) {
-  btn.disabled = true;
-  btn.innerHTML = `${icon('cloud', 14)}<span>Enviando…</span>`;
-  const box = $('#sidebar-sync-status');
-  if (box) {
-    box.className = 'sync-status cloud-warn';
-    box.title = 'Enviando dados para a nuvem…';
-    box.innerHTML = `<span class="sync-dot"></span>${icon('cloud', 15)}<span>Enviando…</span>`;
-  }
-  const cfg = state.supabase;
-  try {
-    if (state.funcionarios.length) await supabaseUpsert(cfg, 'funcionarios', state.funcionarios.map(funcToRow), 'id');
-    if (state.lancamentos.length) await supabaseUpsert(cfg, 'lancamentos', state.lancamentos.map(lancToRow), 'id');
-    await supabaseUpsert(cfg, 'app_settings', [{ id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }], 'id');
-    state.ui.pingResult = { ok: true, ms: 0, message: 'Dados enviados com sucesso (sem duplicar).' };
-    clearSyncQueue(); // envio completo cobriu tudo — não sobrou nada pendente
-  } catch (e) {
-    state.ui.pingResult = { ok: false, ms: 0, message: 'Falha ao enviar: ' + e.message };
-  }
-  btn.disabled = false;
-  btn.innerHTML = `${icon('cloud', 14)}<span>${sidebarSyncButtonLabel()}</span>`;
-  paintSidebarSync();
 }
 
 /* ---------------- DASHBOARD ---------------- */
