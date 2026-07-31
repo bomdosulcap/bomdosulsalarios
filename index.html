@@ -632,6 +632,19 @@ async function persist(key, value, label) {
   return ok;
 }
 
+// Espera a confirmação da nuvem (upsert/delete) sem travar o uso do
+// sistema: se a nuvem estiver fora do ar, o registro já entrou sozinho na
+// fila de reenvio automático (ver cloudSyncUpsert/cloudSyncDelete) — aqui só
+// avisamos visualmente que vai tentar de novo, sem impedir o usuário de
+// continuar. O ponto principal é permitir "await" antes de considerar a
+// ação de salvar totalmente concluída, para a busca automática da nuvem ao
+// abrir o sistema nunca encontrar a nuvem desatualizada.
+async function awaitCloudSync(promise, label) {
+  const ok = await promise;
+  if (!ok) showToast(`${label}: salvo neste dispositivo, mas a nuvem está indisponível — reenviando automaticamente assim que possível.`, 'error');
+  return ok;
+}
+
 /* ---------------- SUPABASE (REST / PostgREST) ---------------- */
 
 function supabaseBaseUrl(cfg) {
@@ -712,26 +725,31 @@ async function supabaseDeleteById(cfg, table, id) {
   if (!res.ok) throw new Error('Supabase delete ' + table + ' falhou: HTTP ' + res.status);
 }
 
-// Envia (fire-and-forget) uma linha para o Supabase quando a sincronização
-// em nuvem está ativa. Nunca bloqueia a interface local. Se falhar (nuvem
-// fora do ar, por exemplo), o registro entra na fila de reenvio pendente
-// em vez de simplesmente se perder — o sistema tenta de novo sozinho depois.
+// Envia uma linha para o Supabase quando a sincronização em nuvem está
+// ativa. Retorna uma Promise que quem chama pode aguardar (await) — assim,
+// uma ação de salvar só é dada como concluída depois que o dado realmente
+// chegou na nuvem (ou, se falhar, depois de já estar registrado na fila de
+// reenvio). Isso é o que torna seguro reativar a busca automática da nuvem
+// ao abrir o sistema: ela nunca vai encontrar a nuvem "atrasada" em relação
+// ao que acabou de ser salvo localmente.
 function cloudSyncUpsert(table, row, onConflict) {
-  if (!state.supabase.enabled) return;
-  supabaseUpsert(state.supabase, table, [row], onConflict)
-    .then(() => dequeueSyncRetry(table, row.id))
+  if (!state.supabase.enabled) return Promise.resolve(true);
+  return supabaseUpsert(state.supabase, table, [row], onConflict)
+    .then(() => { dequeueSyncRetry(table, row.id); return true; })
     .catch((e) => {
       console.warn('cloud sync (upsert) falhou — entrou na fila de reenvio:', e.message);
       queueSyncRetry(table, row.id, 'upsert');
+      return false;
     });
 }
 function cloudSyncDelete(table, id) {
-  if (!state.supabase.enabled) return;
-  supabaseDeleteById(state.supabase, table, id)
-    .then(() => dequeueSyncRetry(table, id))
+  if (!state.supabase.enabled) return Promise.resolve(true);
+  return supabaseDeleteById(state.supabase, table, id)
+    .then(() => { dequeueSyncRetry(table, id); return true; })
     .catch((e) => {
       console.warn('cloud sync (delete) falhou — entrou na fila de reenvio:', e.message);
       queueSyncRetry(table, id, 'delete');
+      return false;
     });
 }
 
@@ -1013,27 +1031,36 @@ async function init() {
   if (catDesc && catDesc.length) state.catalogoDescontos = catDesc;
   if (queue) state.syncQueue = queue;
   if (state.supabase.enabled) {
-    // IMPORTANTE: não chamamos mais pullFromCloud() automaticamente aqui.
-    // Antes, toda vez que o sistema era aberto (inclusive só fechando e
-    // reabrindo a aba, ou saindo e entrando de novo), ele buscava os dados
-    // da nuvem e SUBSTITUÍA funcionários/lançamentos locais — se um
-    // lançamento tivesse acabado de ser criado e o envio dele para a nuvem
-    // ainda não tivesse terminado (ou tivesse falhado sem dar tempo de
-    // entrar na fila de reenvio), essa busca automática apagava o
-    // lançamento da tela, mesmo ele estando salvo corretamente localmente.
-    // Agora a nuvem só é lida quando o usuário pede explicitamente, no
-    // botão "Importar dados da nuvem" em Configurações — o armazenamento
-    // local é sempre a fonte de verdade do que aparece no sistema.
+    // Antes, isso rodava sem nenhuma proteção contra sobrescrever dados
+    // ainda não confirmados na nuvem. Agora é seguro porque: (1) salvar um
+    // cadastro só é considerado concluído depois de confirmar a nuvem
+    // também (ver cloudSyncUpsert/awaitCloudSync), e (2) qualquer envio que
+    // falhe fica registrado na fila de reenvio, que é respeitada durante o
+    // "merge" dentro de pullFromCloud() — então mesmo numa falha de rede,
+    // essa busca automática não apaga nada que ainda esteja pendente.
     try {
       state.ui.pingResult = await supabasePing(state.supabase);
     } catch (e) {
       state.ui.pingResult = { ok: false, ms: 0, message: e.message };
     }
-    // Se a conexão está OK e ficou algo pendente de uma falha anterior de
-    // ENVIO (nunca de importação), reenvia sozinho agora — isso só escreve
-    // na nuvem, nunca sobrescreve o que está local.
-    if (state.ui.pingResult.ok && pendingSyncCount() > 0) {
-      await flushSyncQueue();
+    if (state.ui.pingResult.ok) {
+      // Primeiro reenvia o que tiver pendente de uma falha anterior (só
+      // escreve na nuvem, nunca sobrescreve o local), depois busca a
+      // versão mais atual — nessa ordem, o que acabou de ser reenviado já
+      // aparece na busca seguinte.
+      if (pendingSyncCount() > 0) {
+        await flushSyncQueue();
+      }
+      try {
+        await pullFromCloud();
+        // Guarda localmente o que veio da nuvem, para o sistema continuar
+        // funcionando com os dados mais recentes mesmo se abrir sem
+        // conexão da próxima vez.
+        await persist(STORAGE_KEYS.FUNC, state.funcionarios, 'o cache local de funcionários');
+        await persist(STORAGE_KEYS.LANC, state.lancamentos, 'o cache local de lançamentos');
+      } catch (e) {
+        console.warn('Não foi possível atualizar com os dados da nuvem — usando o que está salvo localmente.', e.message);
+      }
     }
   }
   state.loading = false;
@@ -1863,7 +1890,7 @@ function attachFuncionariosListeners() {
           const ok = await persist(STORAGE_KEYS.FUNC, novaLista, 'a exclusão do funcionário');
           if (!ok) { btn.disabled = false; return; }
           state.funcionarios = novaLista;
-          cloudSyncDelete('funcionarios', f.id);
+          await awaitCloudSync(cloudSyncDelete('funcionarios', f.id), 'Exclusão do funcionário');
           closeModal();
           renderView();
         });
@@ -1908,7 +1935,8 @@ function openFuncForm(existing) {
         return; // mantém o modal aberto com os dados preenchidos, para tentar de novo
       }
       state.funcionarios = novaLista;
-      cloudSyncUpsert('funcionarios', funcToRow(saved), 'id');
+      if (submitBtn && state.supabase.enabled) submitBtn.innerHTML = 'Enviando para a nuvem...';
+      await awaitCloudSync(cloudSyncUpsert('funcionarios', funcToRow(saved), 'id'), 'Funcionário');
       closeModal();
       renderView();
     });
@@ -1933,7 +1961,7 @@ async function persistCatalogos(novoProv, novoDesc) {
     state.catalogoProventos = prov;
     state.catalogoDescontos = desc;
     if (state.supabase.enabled) {
-      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+      await awaitCloudSync(cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id'), 'Proventos/descontos');
     }
   }
   return okProv && okDesc;
@@ -2183,10 +2211,11 @@ function attachLancamentosListeners() {
     };
     const novaLista = [...state.lancamentos, novoLanc];
     const ok = await persist(STORAGE_KEYS.LANC, novaLista, 'o lançamento');
-    quickBtn.disabled = false;
-    if (!ok) return;
+    if (!ok) { quickBtn.disabled = false; return; }
     state.lancamentos = novaLista;
-    cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
+    if (state.supabase.enabled) quickBtn.innerHTML = `${icon('wallet', 15)} Enviando para a nuvem...`;
+    await awaitCloudSync(cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id'), 'Lançamento');
+    quickBtn.disabled = false;
     renderView();
   });
   bindRemoveButtons();
@@ -2203,7 +2232,7 @@ function attachLancamentosListeners() {
       const ok = await persist(STORAGE_KEYS.LANC, novaLista, 'a exclusão do lançamento');
       if (!ok) { btn.disabled = false; return; }
       state.lancamentos = novaLista;
-      cloudSyncDelete('lancamentos', id);
+      await awaitCloudSync(cloudSyncDelete('lancamentos', id), 'Exclusão do lançamento');
       renderView();
     }));
   }
@@ -2248,7 +2277,8 @@ function openLancForm() {
         return;
       }
       state.lancamentos = novaLista;
-      cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id');
+      if (submitBtn && state.supabase.enabled) submitBtn.innerHTML = 'Enviando para a nuvem...';
+      await awaitCloudSync(cloudSyncUpsert('lancamentos', lancToRow(novoLanc), 'id'), 'Lançamento');
       closeModal();
       renderView();
     });
@@ -2651,13 +2681,17 @@ function attachConfigListeners() {
     state.empresa = novaEmpresa;
     state.supabase = novoSupabase;
     if (state.supabase.enabled) {
-      cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id');
+      await awaitCloudSync(cloudSyncUpsert('app_settings', { id: 1, config: buildSettingsConfigPayload(), empresa: state.empresa }, 'id'), 'Configurações');
       if (habilitandoAgora && (state.funcionarios.length || state.lancamentos.length)) {
-        Promise.all([
-          state.funcionarios.length ? supabaseUpsert(state.supabase, 'funcionarios', state.funcionarios.map(funcToRow), 'id') : Promise.resolve(),
-          state.lancamentos.length ? supabaseUpsert(state.supabase, 'lancamentos', state.lancamentos.map(lancToRow), 'id') : Promise.resolve(),
-        ]).then(() => showToast('Cadastros locais existentes foram enviados para a nuvem.', 'ok'))
-          .catch((e) => showToast('Não foi possível enviar os cadastros locais já existentes para a nuvem: ' + e.message, 'error'));
+        try {
+          await Promise.all([
+            state.funcionarios.length ? supabaseUpsert(state.supabase, 'funcionarios', state.funcionarios.map(funcToRow), 'id') : Promise.resolve(),
+            state.lancamentos.length ? supabaseUpsert(state.supabase, 'lancamentos', state.lancamentos.map(lancToRow), 'id') : Promise.resolve(),
+          ]);
+          showToast('Cadastros locais existentes foram enviados para a nuvem.', 'ok');
+        } catch (e) {
+          showToast('Não foi possível enviar os cadastros locais já existentes para a nuvem: ' + e.message, 'error');
+        }
       }
       state.ui.pingResult = null; // volta para "Verificando…" até o novo teste responder
     } else {
